@@ -1,0 +1,20 @@
+Package: pyvsb
+Version: 0.1
+Section: admin
+Priority: optional
+Architecture: all
+Depends: python (>= 2.5), python-configobj
+Recommends: p7zip-full
+Homepage: http://sourceforge.net/projects/pyvsb
+Maintainer: Konishchev Dmitry <konishchev@gmail.com>
+Description: A very simple in configuring but powerful backup tool.
+ Simple backup tool for desktop use written in Python. Uses only
+ standard file types such as plain text and tar archives for storing
+ backuped files.
+ .
+  Features:
+  - incremental backup.
+  - compressing backuped data by 7z, bz2 and gz.
+  - email reports.
+  - starting user scripts before and after backup process.
+  - filtering backuped files by regular expressions.
