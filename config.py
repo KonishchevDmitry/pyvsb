@@ -101,22 +101,14 @@ class Config():
 			E(_("Python module ConfigObj is not installed. Please install it."))
 			return 1
 
-		configobj_options = {
-			'file_error': True,
-			'interpolation': False,
-			'stringify': False
-		}
-
 		try:
-			config = ConfigObj(config_path, configobj_options)
+			config = ConfigObj(config_path, file_error = True, interpolation = False, stringify = False)
 		except (IOError, ConfigObjError), e:
 			E(_("Configuration file error: %s") % EE(e)) # Точку не надо - она уже есть в сообщении
 			return 1
 		# Читаем конфигурационный файл <--
 
-
 		# Раскидываем прочитанные опции по своим местам -->
-
 		general_options = (
 			"backup_root",
 			"backup_format",
