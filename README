@@ -1,0 +1,6 @@
+PyVSB - A very simple in configuring but powerful backup tool.
+
+PyVSB is a simple backup tool for desktop use written in Python. Uses only
+standard file types such as plain text and tar archives for storing backed up
+files.
+

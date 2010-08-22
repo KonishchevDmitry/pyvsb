@@ -10,7 +10,7 @@ Maintainer: Konishchev Dmitry <konishchev@gmail.com>
 Description: A very simple in configuring but powerful backup tool.
  Simple backup tool for desktop use written in Python. Uses only
  standard file types such as plain text and tar archives for storing
- backuped files.
+ backed up files.
  .
   Features:
   - incremental backup.
