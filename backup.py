@@ -462,7 +462,21 @@ class Backup:
 			raise Error
 
 		try:
-			file_hash = hashlib.sha1()
+			# Выбираем хэш функцию на основе размера хэша -->
+			if self.config.backup.hash_size == 128:
+				file_hash = hashlib.sha1()
+			elif self.config.backup.hash_size == 224:
+				file_hash = hashlib.sha224()
+			elif self.config.backup.hash_size == 256:
+				file_hash = hashlib.sha256()
+			elif self.config.backup.hash_size == 384:
+				file_hash = hashlib.sha384()
+			elif self.config.backup.hash_size == 512:
+				file_hash = hashlib.sha512()
+			else:
+				E(_("Logical error!"))
+				file_hash = hashlib.sha1()
+			# Выбираем хэш функцию на основе размера хэша <--
 
 			while 1:
 				data = src_file.read(BUF_SIZE)

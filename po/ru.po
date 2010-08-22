@@ -134,9 +134,9 @@ msgstr ""
 "'%s' была ссылкой на '%s', но сейчас это ссылка на '%s'. Пропускаем "
 "изменение ссылки."
 
-#: backup.py:340 config.py:84 config.py:201 config.py:272 main.py:107
-#: storage.py:50 storage.py:254 storage.py:259 storage.py:323 storage.py:327
-#: storage.py:457
+#: backup.py:340 backup.py:477 config.py:86 config.py:220 config.py:291
+#: main.py:107 storage.py:50 storage.py:254 storage.py:259 storage.py:323
+#: storage.py:327 storage.py:457
 msgid "Logical error!"
 msgstr "Логическая ошибка!"
 
@@ -209,16 +209,16 @@ msgstr "Не удалось открыть временный файл '%s' на
 msgid "File type of '%s' has been changed."
 msgstr "Тип файла '%s' изменился."
 
-#: backup.py:478
+#: backup.py:492
 #, python-format
 msgid "Error while copying file '%s' to '%s': %s."
 msgstr "Ошибка при копировании файла '%s' в '%s': '%s'."
 
-#: backup.py:485
+#: backup.py:499
 msgid "Getting temp storage file info failed."
 msgstr "Получение информации о временном файле архива завершилось неудачей."
 
-#: backup.py:513
+#: backup.py:527
 msgid "Sending email report..."
 msgstr "Отправляем email отчет..."
 
@@ -436,84 +436,84 @@ msgstr "Ошибка при записи информации об уникал�
 msgid "Can't write backup log file '%s': %s."
 msgstr "Ошибка при записи лога в '%s': %s."
 
-#: config.py:91
+#: config.py:93
 msgid "Configuration file error:"
 msgstr "Ошибка конфигурационного файла:"
 
-#: config.py:99
+#: config.py:101
 msgid "Python module ConfigObj is not installed. Please install it."
 msgstr ""
 "Python'овский модуль ConfigObj не установлен. Пожалуйста, установите его."
 
-#: config.py:111
+#: config.py:113
 #, python-format
 msgid "Configuration file error: %s"
 msgstr "Ошибка конфигурационного файла: %s"
 
-#: config.py:145
+#: config.py:148
 #, python-format
 msgid "%s '%s' value '%s' is not an absolute path."
 msgstr "%s значение опции '%s' ('%s') - не абсолютный путь."
 
-#: config.py:155
+#: config.py:158 config.py:189
 #, python-format
 msgid "%s bad '%s' value '%s'. Allowed values: %s."
 msgstr "%s неверное значение опции '%s': '%s'. Допустимые значения: %s."
 
-#: config.py:166 config.py:170 config.py:183
+#: config.py:169 config.py:173 config.py:184 config.py:202
 #, python-format
 msgid "%s bad '%s' value '%s'."
 msgstr "%s неверное значение опции '%s': '%s'."
 
-#: config.py:190
+#: config.py:209
 #, python-format
 msgid "%s bad '%s' value: it can't be a multiline string."
 msgstr "%s неверное значение опции '%s' - оно не может быть многострочным."
 
-#: config.py:206
+#: config.py:225
 #, python-format
 msgid "%s bad '%s' type."
 msgstr "%s неверный тип опции '%s'."
 
-#: config.py:215
+#: config.py:234
 #, python-format
 msgid "%s backup entry path '%s' is not an absolute path."
 msgstr "%s путь элемента бэкапа '%s' - не абсолютный путь."
 
-#: config.py:232
+#: config.py:251
 #, python-format
 msgid "%s bad '%s' value '%s' for backup entry '%s'. Allowed values: %s."
 msgstr ""
 "%s неверное значение опции '%s' ('%s') для элемента бэкапа '%s'. Допустимые "
 "значения: %s. "
 
-#: config.py:260
+#: config.py:279
 #, python-format
 msgid "%s bad filter regex string for backup entry '%s': '%s'."
 msgstr ""
 "%s неверное регулярное выражение для фильтра элемента бэкапа '%s': '%s'."
 
-#: config.py:267
+#: config.py:286
 #, python-format
 msgid "%s bad filter string for backup entry '%s': '%s'."
 msgstr "%s неверная строка фильтра для элемента бэкапа '%s': '%s'."
 
-#: config.py:277
+#: config.py:296
 #, python-format
 msgid "%s bad '%s' type for backup entry '%s'."
 msgstr "%s неверный тип опции '%s' для элемента бэкапа '%s'."
 
-#: config.py:282
+#: config.py:301
 #, python-format
 msgid "%s unknown option '%s' in backup entry '%s'."
 msgstr "%s неизвестная опция '%s' в элементе бэкапа '%s'."
 
-#: config.py:289
+#: config.py:308
 #, python-format
 msgid "%s unknown option '%s'."
 msgstr "%s неизвестная опция '%s'."
 
-#: config.py:292
+#: config.py:311
 #, python-format
 msgid ""
 "Backup config dump:\n"
@@ -522,21 +522,21 @@ msgstr ""
 "Дамп переменных конфига:\n"
 "%s"
 
-#: config.py:297
+#: config.py:316
 #, python-format
 msgid "%s 'backup_root' option not found in config. It must exists."
 msgstr ""
 "%s опция 'backup_root' не найдена в конфигурационном файле, но это "
 "обязательная опция."
 
-#: config.py:301
+#: config.py:320
 #, python-format
 msgid "%s no backup entries found in config. At least one must exists."
 msgstr ""
 "%s конфигурационный файл не содержит ни одного элемента бэкапа. Каждый "
 "конфигурационный файл должен содержать хотя бы один элемент бэкапа."
 
-#: config.py:308
+#: config.py:327
 #, python-format
 msgid ""
 "%s option 'send_email_report' set to true, but 'mail_to' option is not set."
@@ -544,7 +544,7 @@ msgstr ""
 "%s опция 'send_email_report' установлена в true, но опция 'mail_to' не "
 "установлена."
 
-#: config.py:311
+#: config.py:330
 #, python-format
 msgid ""
 "%s option 'send_email_report' set to true, but 'mail_program' option is not "
@@ -553,7 +553,7 @@ msgstr ""
 "%s опция 'send_email_report' установлена в true, но опция 'mail_program' не "
 "установлена."
 
-#: config.py:325
+#: config.py:344
 #, python-format
 msgid "Can't get '%s' absolute path: %s."
 msgstr "Не удалось получить абсолютный путь '%s': %s."

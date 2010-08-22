@@ -39,6 +39,8 @@ class Backup_config(Struct):
 		self.backups_per_group = 30
 		self.groups_per_backup_root = 0
 
+		self.hash_size = 128
+
 		self.send_email_report = 0
 		self.mail_to = ""
 		self.mail_from = ""
@@ -120,6 +122,7 @@ class Config():
 			"backup_format",
 			"backups_per_group",
 			"groups_per_backup_root",
+			"hash_size",
 			"send_email_report",
 			"mail_to",
 			"mail_from",
@@ -171,6 +174,22 @@ class Config():
 						return 1
 
 					setattr(self.backup, name, val)
+
+
+				elif name == "hash_size":
+
+					try:
+						val = int(val)
+					except ValueError:
+						E(_("%s bad '%s' value '%s'.") % (config_error_prefix, name, val))
+						return 1
+
+					allowed_values = (128, 224, 256, 384, 512)
+					if val not in allowed_values:
+						E(_("%s bad '%s' value '%s'. Allowed values: %s.") % (config_error_prefix, name, val, allowed_values))
+						return 1
+
+					self.backup.hash_size = val
 
 
 				elif name == "send_email_report":

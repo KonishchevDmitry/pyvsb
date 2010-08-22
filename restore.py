@@ -144,7 +144,7 @@ class Restore:
 				except Storage_error:
 					# Если открыть storage не удалось, то помечаем его,
 					# чтобы в будущем не пытаться открыть снова.
-					self.storages[src_backup] = None
+					self.storages[src_backup] = src_storage = None
 					E(_("Opening archive with backup data for backup '%s' in group '%s' failed.") % (src_backup, self.config.restore.src_group))
 
 			if src_storage == None:

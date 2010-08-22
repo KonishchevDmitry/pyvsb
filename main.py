@@ -19,7 +19,7 @@
 #***************************************************************************
 
 PROGRAM_COMMAND_NAME = "pyvsb"
-PROGRAM_VERSION = "0.1"
+PROGRAM_VERSION = "0.2"
 
 # Настраиваем работу gettext -->
 import gettext
