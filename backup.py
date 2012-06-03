@@ -489,7 +489,7 @@ class Backup:
 			src_file.close()
 			dest_file.close()
 		except IOError, e:
-			E(_("Error while copying file '%s' to '%s': %s.") % (src_path, dest_path, e.filename, EE(e)))
+			E(_("Error while copying file '%s' to '%s': %s.") % (src_path, dest_path, EE(e)))
 			raise Error
 
 		file_hash = file_hash.hexdigest()
