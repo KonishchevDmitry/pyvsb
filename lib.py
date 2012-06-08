@@ -404,12 +404,9 @@ def mkdir(path):
 
 
 
-def mkdtemp(dest_dir = ""):
+def mkdtemp(dest_dir = "/var/tmp"):
 	try:
-		if dest_dir:
-			return tempfile.mkdtemp(dir = dest_dir)
-		else:
-			return tempfile.mkdtemp()
+		return tempfile.mkdtemp(dir = dest_dir)
 	except OSError, e:
 		if dest_dir:
 			E(_("Can't create temp directory in '%s': %s.") % (dest_dir, EE(e)))
@@ -421,12 +418,9 @@ def mkdtemp(dest_dir = ""):
 
 
 
-def mkstemp(dest_dir = ""):
+def mkstemp(dest_dir = "/var/tmp"):
 	try:
-		if dest_dir:
-			return tempfile.mkstemp(dir = dest_dir)[1]
-		else:
-			return tempfile.mkstemp()[1]
+		return tempfile.mkstemp(dir = dest_dir)[1]
 	except (OSError, IOError), e:
 		if dest_dir:
 			E(_("Can't create temp file in '%s': %s.") % (dest_dir, EE(e)))
