@@ -324,7 +324,7 @@ class Backup_fs:
 
 		backups = []
 
-		for backup in backups_list:
+		for backup in sorted(backups_list):
 			if len(backup.splitlines()) == 1 and BACKUP_NAME_RE.search(backup) and os.path.isdir(os.path.join(group_path, backup)):
 				backups.append(backup)
 			elif backup == "current":
