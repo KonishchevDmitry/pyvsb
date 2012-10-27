@@ -1,7 +1,9 @@
+from __future__ import print_function
+
 import sys
 import logging
 
-from pyvsb.backup import Backuper
+from pyvsb.backuper import Backuper
 
 class OutputHandler(logging.Handler):
     """
@@ -18,7 +20,7 @@ class OutputHandler(logging.Handler):
 
         try:
             stream = sys.stdout if record.levelno <= logging.INFO else sys.stderr
-            print >> stream, self.format(record).encode("utf-8")
+            print(self.format(record), file = stream)
         except:
             self.handleError(record)
         finally:
