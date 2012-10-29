@@ -1,8 +1,8 @@
+# TODO
+
 import bz2
-import errno
 import grp
 import logging
-import mmap
 import os
 import pwd
 import shutil
@@ -12,7 +12,6 @@ import tarfile
 from hashlib import sha1
 
 import psys
-from psys import eintr_retry
 
 from .core import Error, LogicalError
 
@@ -26,7 +25,6 @@ _ENCODING = "utf-8"
 class Backup:
     """Represents a single backup."""
 
-    # TODO
     MODE_READ = "read"
     """Reading mode."""
 
@@ -34,7 +32,6 @@ class Backup:
     """Writing mode."""
 
 
-    # TODO
     __STATE_OPENED = "opened"
     """Opened backup object state."""
 
@@ -45,12 +42,18 @@ class Backup:
     """Closed backup object state."""
 
 
-    # TODO
-    __FILE_STATUS_EXTERN = "extern"
-    __FILE_STATUS_UNIQUE = "unique"
-
+    __DATA_FILE_NAME = "data.tar.bz2"
+    """Name of backup data file."""
 
     __METADATA_FILE_NAME = "metadata.bz2"
+    """Name of backup metadata file."""
+
+
+    __FILE_STATUS_EXTERN = "extern"
+    """Extern file status."""
+
+    __FILE_STATUS_UNIQUE = "unique"
+    """Unique file status."""
 
 
     def __init__(self, domain_path, name, mode, config):
@@ -66,6 +69,9 @@ class Backup:
         # Current object state
         self.__state = self.__STATE_OPENED
 
+        # Backup data open mode
+        self.__mode = mode
+
 
         # Backup data file
         self.__data = None
@@ -73,11 +79,13 @@ class Backup:
         # Backup metadata file
         self.__metadata = None
 
-        # Available file hashes
+        # A set of hashes of all available files in this backup domain.
         self.__hashes = set()
 
-        # TODO
+        # A map of files from the previous backup to their hashes and
+        # fingerprints.
         self.__prev_files = {}
+
         # TODO
         self.__config = config
 
@@ -97,7 +105,7 @@ class Backup:
                     self.__path, psys.e(e))
 
             try:
-                data_path = os.path.join(self.__path, "data.tar.bz2")
+                data_path = os.path.join(self.__path, self.__DATA_FILE_NAME)
 
                 try:
                     self.__data = tarfile.open(data_path, "w")
@@ -122,9 +130,16 @@ class Backup:
     def add_file(self, path, stat_info, link_target, file_obj):
         """Adds a file to the storage."""
 
+        if self.__state != self.__STATE_OPENED:
+            raise Error("The backup file is closed.")
+
+        if self.__mode != self.MODE_WRITE:
+            raise Error("The backup is opened in read-only mode.")
+
         # Limitation due to using text files for metadata
         if "\r" in path or "\n" in path:
             raise Error(r"File names with '\r' and '\n' aren't supported")
+
 
         extern = False
         fingerprint = _get_file_fingerprint(stat_info)
@@ -149,13 +164,21 @@ class Backup:
             self.__metadata.write(metadata.encode(_ENCODING))
 
 
-    # TODO
     def close(self):
+        """Closes the object."""
+
         if self.__state != self.__STATE_CLOSED:
             try:
                 if self.__state != self.__STATE_COMMITTED:
-                    self.__close()
-                    shutil.rmtree(self.__path)
+                    try:
+                        self.__close()
+                    except Exception as e:
+                        LOG.error("Failed to close '%s' backup object: %s",
+                            self.__name, psys.e(e))
+
+                    shutil.rmtree(self.__path, onerror = lambda func, path, excinfo:
+                        LOG.error("Failed to remove '%s' backup's temporary data '%s': %s.",
+                            self.__name, path, psys.e(excinfo[1])))
             finally:
                 self.__state = self.__STATE_CLOSED
 
@@ -164,14 +187,23 @@ class Backup:
         """Commits the changes."""
 
         if self.__state != self.__STATE_OPENED:
-            raise Error("Invalid backup state.")
+            raise Error("The backup file is closed.")
+
+        if self.__mode != self.MODE_WRITE:
+            raise Error("The backup is opened in read-only mode.")
 
         try:
             self.__close()
 
             backup_path = os.path.join(self.__domain_path, self.__name)
-            os.rename(self.__path, backup_path)
-            self.__path = backup_path
+
+            try:
+                os.rename(self.__path, backup_path)
+            except Exception as e:
+                raise Error("Unable to rename backup data directory '{}' to '{}': {}.",
+                    self.__path, backup_path, psys.e(e))
+            else:
+                self.__path = backup_path
 
             self.__state = self.__STATE_COMMITTED
         finally:
@@ -183,10 +215,16 @@ class Backup:
 
         try:
             if self.__data is not None:
-                self.__data.close()
+                try:
+                    self.__data.close()
+                except Exception as e:
+                    raise Error("Unable to close backup data file: {}.", psys.e(e))
         finally:
             if self.__metadata is not None:
-                self.__metadata.close()
+                try:
+                    self.__metadata.close()
+                except Exception as e:
+                    raise Error("Unable to close backup metadata file: {}.", psys.e(e))
 
 
     def __deduplicate(self, path, stat_info, fingerprint, file_obj):
@@ -250,7 +288,7 @@ class Backup:
                 self.__load_backup_metadata(backup,
                     with_prev_files_info = trust_modify_time and not backup_id)
         except Exception as e:
-            LOG.error("Failed to load metadata from previous backups: %s.", e)
+            LOG.error("Failed to load metadata from previous backups: %s.", psys.e(e))
 
 
     def __load_backup_metadata(self, name, with_prev_files_info):
@@ -275,7 +313,7 @@ class Backup:
                     if with_prev_files_info:
                         self.__prev_files[path] = ( hash, fingerprint )
         except Exception as e:
-            LOG.error("Failed to load metadata '%s': %s.", metadata_path, e)
+            LOG.error("Failed to load metadata '%s': %s.", metadata_path, psys.e(e))
 
 
 

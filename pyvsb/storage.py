@@ -11,6 +11,7 @@ from .core import Error
 LOG = logging.getLogger(__name__)
 
 
+# TODO
 class Storage:
     """Represents a backup storage."""
 
