@@ -39,12 +39,14 @@ class Storage:
 
         domain_path = self.__get_domain_path(domain)
         self.__backup = Backup(domain_path,
-            time.strftime("%Y.%m.%d-%H:%M:%S", time.localtime()), Backup.MODE_WRITE)
+            time.strftime("%Y.%m.%d-%H:%M:%S", time.localtime()),
+            Backup.MODE_WRITE, config)
 
 
     def add_file(self, path, stat_info, link_target = "", file_obj = None):
         """Adds a file to the storage."""
 
+        # TODO: exceptions
         LOG.debug("Storing file '%s'...", path)
         self.__backup.add_file(path, stat_info, link_target, file_obj)
 

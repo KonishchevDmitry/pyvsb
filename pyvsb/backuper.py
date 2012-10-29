@@ -18,7 +18,10 @@ class FileTypeChangedError(Exception):
 # TODO
 class Backuper:
     def __init__(self):
-        config = { "backup_root": os.path.expanduser("~/temp/backup") }
+        config = {
+            "backup_root":       os.path.expanduser("~/temp/backup"),
+            "trust_modify_time": True,
+        }
         self.__items = [ os.path.abspath("tests/test_root/etc"), os.path.abspath("tests/test_root/home") ]
 
         self.__open_flags = os.O_RDONLY | os.O_NOFOLLOW
@@ -40,7 +43,7 @@ class Backuper:
     def __backup(self, path, toplevel = False):
         """Backups the specified path."""
 
-        LOG.debug("Backing up '%s'...", path)
+        LOG.info("Backing up '%s'...", path)
 
         try:
             stat_info = os.lstat(path)
