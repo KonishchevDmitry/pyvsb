@@ -1,4 +1,4 @@
-# TODO
+"""Provides a class that represents a backup."""
 
 import bz2
 import grp

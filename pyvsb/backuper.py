@@ -6,7 +6,7 @@ import stat
 import psys
 from psys import eintr_retry
 
-from .core import Error
+from .config import get_config
 from .storage import Storage
 
 LOG = logging.getLogger(__name__)
@@ -18,21 +18,18 @@ class FileTypeChangedError(Exception):
 # TODO
 class Backuper:
     def __init__(self):
-        config = {
-            "backup_root":       os.path.expanduser("~/temp/backup"),
-            "trust_modify_time": True,
-        }
-        self.__items = [ os.path.abspath("tests/test_root/etc"), os.path.abspath("tests/test_root/home") ]
+        self.__config = get_config("pyvsb.conf")
 
         self.__open_flags = os.O_RDONLY | os.O_NOFOLLOW
         if hasattr(os, "O_NOATIME"):
             self.__open_flags |= os.O_NOATIME
 
-        self.__storage = Storage(config, Storage.MODE_BACKUP)
+        self.__storage = Storage(self.__config, Storage.MODE_BACKUP)
+
 
     def backup(self):
         try:
-            for item in self.__items:
+            for item in self.__config["backup_items"]:
                 self.__backup(item, toplevel = True)
 
             self.__storage.commit()
