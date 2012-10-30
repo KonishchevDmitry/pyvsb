@@ -26,20 +26,20 @@ class Storage:
         self.__config = config
 
         try:
-            domains = sorted(
-                domain for domain in os.listdir(self.__config["backup_root"])
-                    if not domain.startswith("."))
+            groups = sorted(
+                group for group in os.listdir(self.__config["backup_root"])
+                    if not group.startswith("."))
         except EnvironmentError as e:
             raise Error("Error while reading backup directory '{}': {}.",
                 self.__config["backup_root"], psys.e(e))
 
-        if domains:
-            domain = domains[-1]
+        if groups:
+            group = groups[-1]
         else:
-            domain = self.__create_domain()
+            group = self.__create_group()
 
-        domain_path = self.__get_domain_path(domain)
-        self.__backup = Backup(domain_path,
+        group_path = self.__get_group_path(group)
+        self.__backup = Backup(group_path,
             time.strftime("%Y.%m.%d-%H:%M:%S", time.localtime()),
             Backup.MODE_WRITE, config)
 
@@ -61,23 +61,23 @@ class Storage:
         self.__backup.commit()
 
 
-    def __create_domain(self):
-        """Creates a new backup domain."""
+    def __create_group(self):
+        """Creates a new backup group."""
 
-        domain = time.strftime("%Y.%m.%d", time.localtime())
-        domain_path = self.__get_domain_path(domain)
+        group = time.strftime("%Y.%m.%d", time.localtime())
+        group_path = self.__get_group_path(group)
 
         try:
-            os.mkdir(domain_path)
+            os.mkdir(group_path)
         except EnvironmentError as e:
             if e.errno != errno.EEXIST:
-                raise Error("Unable to create a new backup domain directory '{}': {}.",
-                    domain_path, psys.e(e))
+                raise Error("Unable to create a new backup group directory '{}': {}.",
+                    group_path, psys.e(e))
 
-        return domain
+        return group
 
 
-    def __get_domain_path(self, domain):
-        """Returns path to the specified domain."""
+    def __get_group_path(self, group):
+        """Returns path to the specified group."""
 
-        return os.path.join(self.__config["backup_root"], domain)
+        return os.path.join(self.__config["backup_root"], group)

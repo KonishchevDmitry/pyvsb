@@ -56,15 +56,15 @@ class Backup:
     """Unique file status."""
 
 
-    def __init__(self, domain_path, name, mode, config):
+    def __init__(self, group_path, name, mode, config):
         # Backup name
         self.__name = name
 
-        # Backup domain path
-        self.__domain_path = domain_path
+        # Backup group path
+        self.__group_path = group_path
 
         # Current backup path
-        self.__path = os.path.join(domain_path, "." + name)
+        self.__path = os.path.join(group_path, "." + name)
 
         # Current object state
         self.__state = self.__STATE_OPENED
@@ -79,7 +79,7 @@ class Backup:
         # Backup metadata file
         self.__metadata = None
 
-        # A set of hashes of all available files in this backup domain.
+        # A set of hashes of all available files in this backup group
         self.__hashes = set()
 
         # A map of files from the previous backup to their hashes and
@@ -90,8 +90,7 @@ class Backup:
         self.__config = config
 
 
-        LOG.debug("Opening backup %s/%s in %s mode...",
-            domain_path, name, mode)
+        LOG.debug("Opening backup %s/%s in %s mode...", group_path, name, mode)
 
         if mode == self.MODE_READ:
             raise Exception("TODO")
@@ -195,7 +194,7 @@ class Backup:
         try:
             self.__close()
 
-            backup_path = os.path.join(self.__domain_path, self.__name)
+            backup_path = os.path.join(self.__group_path, self.__name)
 
             try:
                 os.rename(self.__path, backup_path)
@@ -281,7 +280,7 @@ class Backup:
 
         try:
             backups = sorted((
-                backup for backup in os.listdir(self.__domain_path)
+                backup for backup in os.listdir(self.__group_path)
                     if not backup.startswith(".")), reverse = True)
 
             for backup_id, backup in enumerate(backups):
@@ -295,7 +294,7 @@ class Backup:
         """Loads the specified backup's metadata."""
 
         metadata_path = os.path.join(
-            self.__domain_path, name, self.__METADATA_FILE_NAME)
+            self.__group_path, name, self.__METADATA_FILE_NAME)
 
         try:
             with bz2.BZ2File(metadata_path, mode = "r") as metadata_file:
