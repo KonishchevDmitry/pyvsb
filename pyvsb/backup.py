@@ -107,7 +107,7 @@ class Backup:
                 data_path = os.path.join(self.__path, self.__DATA_FILE_NAME)
 
                 try:
-                    self.__data = tarfile.open(data_path, "w")
+                    self.__data = tarfile.open(data_path, "w:bz2")
                 except Exception as e:
                     raise Error("Unable to create a backup data tar archive '{}': {}.",
                         data_path, psys.e(e))
