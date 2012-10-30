@@ -13,13 +13,10 @@ from .core import Error
 def get_config(path):
     """Parses the configuration file."""
 
-    try:
-        if not os.path.exists(path):
-            raise Error("it doesn't exist")
+    if not os.path.exists(path):
+        raise Error("It doesn't exist.")
 
-        config_obj = imp.load_source("config_obj", path)
-    except Exception as e:
-        raise Error("Unable to load configuration file {}: {}.", path, psys.e(e))
+    config_obj = imp.load_source("config_obj", path)
 
     config = {}
 

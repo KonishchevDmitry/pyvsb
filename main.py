@@ -1,9 +1,14 @@
+# TODO
 from __future__ import print_function
 
+import argparse
+import os
 import sys
 import logging
 
 from pyvsb.backuper import Backuper
+from pyvsb.config import get_config
+from pyvsb.core import Error
 
 class OutputHandler(logging.Handler):
     """
@@ -25,6 +30,43 @@ class OutputHandler(logging.Handler):
             self.handleError(record)
         finally:
             self.release()
+
+
+def main():
+    """The script's main function."""
+
+    parser = argparse.ArgumentParser(
+        description = "pyvsb - A very simple in configuring but powerful backup tool")
+
+    parser.add_argument("-c", "--config", metavar = "CONFIG_PATH", type = str,
+        default = os.path.expanduser("~/.pyvsb.conf"),
+        help = "configuration file path (default is ~/.pyvsb.conf)")
+
+    parser.add_argument("-r", "--restore", metavar = "BACKUP_PATH",
+        default = None, help = "restore the specified backup")
+
+    args = parser.parse_args()
+
+    try:
+        try:
+            config = get_config(args.config)
+        except Exception as e:
+            raise Error("Error while reading configuration file {}: {}",
+                args.config, e)
+
+        # TODO
+        setup(True)
+
+        if args.restore:
+            TODO
+        else:
+            try:
+                with Backuper(config) as backuper:
+                    backuper.backup()
+            except Exception as e:
+                raise Error("Backup failed: {}", e)
+    except Exception as e:
+        sys.exit(str(e))
 
 
 def setup(debug_mode = False, filter = None, max_log_name_length = 16, level = None):
@@ -54,5 +96,4 @@ def setup(debug_mode = False, filter = None, max_log_name_length = 16, level = N
     log.addHandler(handler)
 
 if __name__ == "__main__":
-    setup(True)
-    Backuper().backup()
+    main()
