@@ -1,4 +1,4 @@
-# TODO
+# TODO: check errors
 """pyvsb configuration file parser."""
 
 import copy
@@ -23,8 +23,8 @@ def get_config(path):
     _get_param(config_obj, config, "backup_items", dict,
         validate = _validate_backup_items)
 
-    _get_param(config_obj, config, "max_backups", int)
-    _get_param(config_obj, config, "max_backup_groups", int)
+    _get_param(config_obj, config, "max_backups", int, validate = _validate_positive_integer)
+    _get_param(config_obj, config, "max_backup_groups", int, validate = _validate_positive_integer)
 
     _get_param(config_obj, config, "trust_modify_time", bool, default = True) # TODO
 
@@ -47,7 +47,10 @@ def _get_param(config_obj, config, name, value_type, default = None, validate = 
     if type(value) != value_type:
         raise Error("Invalid value type for configuration parameter '{}'.", config_name)
 
-    config[name] = validate(value)
+    try:
+        config[name] = validate(value)
+    except Exception as e:
+        raise Error("Invalid {} value: {}", config_name, e)
 
 
 def _validate_backup_items(backup_items):
@@ -109,3 +112,12 @@ def _validate_path(path):
         raise Error("Invalid path '{}': it must be an absolute path.", path)
 
     return os.path.normpath(path)
+
+
+def _validate_positive_integer(value):
+    """Checks that the specified value is non-negative integer."""
+
+    if value <= 0:
+        raise Error("Must be a positive number.")
+
+    return value
