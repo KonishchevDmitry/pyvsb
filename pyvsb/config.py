@@ -69,9 +69,12 @@ def _validate_backup_items(backup_items):
             if type(param) != str:
                 raise Error("Backup item parameter name must be a string.")
 
-            if param == "filter":
+            if param in ( "before", "after" ):
+                if type(value) != str:
+                    raise Error("Backup item's '{}' parameter must be a string.", param)
+            elif param == "filter":
                 if type(value) != list or any(type(regex) != str for regex in value):
-                    raise Error("Backup item's filter must be a list of strings.")
+                    raise Error("Backup item's '{}' parameter must be a list of strings.", param)
 
                 regexes = []
 

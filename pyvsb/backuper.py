@@ -8,6 +8,9 @@ import stat
 import psys
 from psys import eintr_retry
 
+import psh
+system = psh.Program("sh", "-c", _defer = False)
+
 from .core import LogicalError
 from .storage import Storage
 
@@ -48,7 +51,9 @@ class Backuper:
 
         try:
             for path, params in self.__config["backup_items"].items():
+                self.__run_script(params.get("before"))
                 self.__backup(path, params.get("filter", []), path)
+                self.__run_script(params.get("after"))
 
             self.__storage.commit()
         finally:
@@ -159,3 +164,15 @@ class Backuper:
         with file_obj:
             stat_info = os.fstat(file_obj.fileno())
             self.__storage.add_file(path, stat_info, file_obj = file_obj)
+
+
+    def __run_script(self, script):
+        """Runs the specified backup script if it's not None."""
+
+        if script is not None:
+            LOG.info("Running: %s", script)
+
+            try:
+                system(script)
+            except Exception as e:
+                LOG.error(e)
