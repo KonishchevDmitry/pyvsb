@@ -4,8 +4,7 @@
 import copy
 import imp
 import os
-
-import psys
+import re
 
 from .core import Error
 
@@ -61,6 +60,7 @@ def _validate_backup_items(backup_items):
             raise Error("Invalid value type backup item path.")
 
         path = _validate_path(path)
+        params = copy.deepcopy(params)
 
         if type(params) != dict:
             raise Error("Invalid value type backup item parameters.")
@@ -72,10 +72,29 @@ def _validate_backup_items(backup_items):
             if param == "filter":
                 if type(value) != list or any(type(regex) != str for regex in value):
                     raise Error("Backup item's filter must be a list of strings.")
+
+                regexes = []
+
+                for regex in value:
+                    policy = regex[0:1]
+                    if policy not in ( "-", "+" ):
+                        raise Error("Invalid backup item's filter '{}': "
+                            "it must be prepended with filtering policy ( '-' or '+' ).", regex)
+
+                    regex = regex[1:]
+
+                    try:
+                        regex = re.compile(regex)
+                    except Exception as e:
+                        raise Error("Invalid backup item's filter '{}': {}.", regex, e)
+
+                    regexes.append(( policy == "+", regex ))
+
+                params[param] = regexes
             else:
                 raise Error("Invalid backup item parameter: '{}'.", param)
 
-        items[path] = copy.deepcopy(params)
+        items[path] = params
 
     return items
 

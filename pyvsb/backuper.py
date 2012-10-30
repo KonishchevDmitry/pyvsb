@@ -1,3 +1,5 @@
+"""Controls backup process."""
+
 import errno
 import logging
 import os
@@ -6,23 +8,29 @@ import stat
 import psys
 from psys import eintr_retry
 
+from .core import LogicalError
 from .storage import Storage
 
 LOG = logging.getLogger(__name__)
 
-# TODO
-class FileTypeChangedError(Exception):
-    pass
 
-# TODO
+class FileTypeChangedError(Exception):
+    """Raised when a file type has been changed during the backup."""
+
+
 class Backuper:
+    """Controls backup process."""
+
     def __init__(self, config):
+        # Config
         self.__config = config
 
+        # Default open() flags
         self.__open_flags = os.O_RDONLY | os.O_NOFOLLOW
         if hasattr(os, "O_NOATIME"):
             self.__open_flags |= os.O_NOATIME
 
+        # Backup storage abstraction
         self.__storage = Storage(config, Storage.MODE_BACKUP)
 
 
@@ -31,23 +39,29 @@ class Backuper:
 
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        #self.close()
+        self.close()
         return False
 
 
-
-
     def backup(self):
+        """Starts the backup."""
+
         try:
-            for item in self.__config["backup_items"]:
-                self.__backup(item, toplevel = True)
+            for path, params in self.__config["backup_items"].items():
+                self.__backup(path, params.get("filter", []), path)
 
             self.__storage.commit()
         finally:
             self.__storage.close()
 
 
-    def __backup(self, path, toplevel = False):
+    def close(self):
+        """Closes the object."""
+
+        self.__storage.close()
+
+
+    def __backup(self, path, filters, toplevel):
         """Backups the specified path."""
 
         LOG.info("Backing up '%s'...", path)
@@ -73,14 +87,30 @@ class Backuper:
                     path, stat_info, link_target = link_target)
 
             if stat.S_ISDIR(stat_info.st_mode):
+                prefix = toplevel + os.path.sep
+
                 for filename in os.listdir(path):
-                    self.__backup(os.path.join(path, filename))
+                    file_path = os.path.join(path, filename)
+
+                    for allow, regex in filters:
+                        if not file_path.startswith(prefix):
+                            raise LogicalError()
+
+                        if regex.search(file_path[len(prefix):]):
+                            if allow:
+                                self.__backup(file_path, filters, toplevel)
+                            else:
+                                LOG.info("Filtering out '%s'...", file_path)
+
+                            break
+                    else:
+                        self.__backup(file_path, filters, toplevel)
         except FileTypeChangedError as e:
             LOG.error("Failed to backup %s: it has suddenly changed its type during the backup.", path)
         except Exception as e:
             if (
                 isinstance(e, EnvironmentError) and
-                e.errno in ( errno.ENOENT, errno.ENOTDIR ) and not toplevel
+                e.errno in ( errno.ENOENT, errno.ENOTDIR ) and path != toplevel
             ):
                 LOG.warning("Failed to backup %s: it has suddenly vanished.", path)
             else:
