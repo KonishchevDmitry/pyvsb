@@ -1,6 +1,8 @@
+# TODO
 """Provides a class that represents a backup."""
 
 import bz2
+import copy
 import grp
 import logging
 import os
@@ -18,45 +20,329 @@ from .core import Error, LogicalError
 LOG = logging.getLogger(__name__)
 
 
+_STATE_OPENED = "opened"
+"""Opened object state."""
+
+_STATE_COMMITTED = "committed"
+"""Committed object state."""
+
+_STATE_CLOSED = "closed"
+"""Closed object state."""
+
+
+_DATA_FILE_NAME = "data.tar.bz2"
+"""Name of backup data file."""
+
+_METADATA_FILE_NAME = "metadata.bz2"
+"""Name of backup metadata file."""
+
+
 _ENCODING = "utf-8"
 """Encoding for all written files."""
 
 
+_FILE_STATUS_EXTERN = "extern"
+"""Extern file status."""
+
+_FILE_STATUS_UNIQUE = "unique"
+"""Unique file status."""
+
+
+
+class Restore:
+    """Controls backup restoring."""
+
+    def __init__(self, group_path, name, config):
+        # Backup name
+        self.__name = name
+
+        # Backup group path
+        self.__group_path = group_path
+
+        # Restore path
+        self.__restore_path = config["restore_path"]
+
+        # Current object state
+        self.__state = _STATE_OPENED
+
+
+        # Backup data file
+        self.__data = None
+
+        # Backup extern files
+        self.__extern_files = {}
+
+        # All backups from the backup group with cached metadata
+        self.__backups = []
+
+        # False if something went wrong during the restore
+        self.__ok = True
+
+
+        try:
+            path = os.path.join(group_path, name)
+            data_path = os.path.join(path, _DATA_FILE_NAME)
+
+            LOG.debug("Opening backup %s for restoring...", path)
+
+            try:
+                self.__data = tarfile.open(data_path, "r:bz2")
+            except Exception as e:
+                raise Error("Unable to open backup data '{}': {}.",
+                    data_path, psys.e(e))
+
+            self.__init_metadata_cache()
+        except:
+            self.close()
+            raise
+
+
+    def close(self):
+        """Closes the object."""
+
+        if self.__state == _STATE_CLOSED:
+            return
+
+        try:
+            if self.__data is not None:
+                try:
+                    self.__data.close()
+                except Exception as e:
+                    LOG.error("Failed to close %s backup data file: %s.", self.__name, e)
+                finally:
+                    self.__data
+
+            self.__extern_files.clear()
+
+            for backup in self.__backups:
+                data = backup.get("data")
+                if data is not None:
+                    try:
+                        data.close()
+                    except Exception as e:
+                        LOG.error("Failed to close %s backup data file: %s.", backup["name"], e)
+
+            del self.__backups[:]
+        finally:
+            self.__state = _STATE_CLOSED
+
+
+    def restore(self):
+        """Restores the backup.
+
+        Returns True if all files has been successfully restored.
+        """
+
+        if self.__state != _STATE_OPENED:
+            raise LogicalError()
+
+        files = []
+
+        LOG.debug("Loading the backup's data...")
+        try:
+            for tar_info in self.__data:
+                files.append(tar_info)
+        except Exception as e:
+            LOG.error("Failed to load the backup's data: %s.", e)
+            self.__ok = False
+        else:
+            LOG.debug("The backup's data has been successfully loaded")
+
+        for tar_info in files:
+            path = "/" + tar_info.name
+            LOG.info("Restoring '%s'...", path)
+
+            try:
+                file_hash = self.__extern_files.get(path)
+
+                if file_hash is None:
+                    try:
+                        self.__data.extract(tar_info,
+                            path = self.__restore_path, set_attrs = False)
+                    except Exception as e:
+                        raise Error("Unable to extract the file from backup: {}.", e)
+                else:
+                    self.__restore_extern_file(tar_info, file_hash)
+
+                # TODO
+                #file_path = os.path.join(self.__restore_path, tar_info.name)
+                # if os.path.exists(file_path)
+                #self.chown(tarinfo, targetpath)
+                #if not tarinfo.issym():
+                #    self.chmod(tarinfo, targetpath)
+                #    self.utime(tarinfo, targetpath)
+            except Exception as e:
+                LOG.error("Failed to restore '%s': %s", path, psys.e(e))
+                self.__ok = False
+
+        return self.__ok
+
+
+    def __get_extern_file(self, backup, file_hash):
+        """
+        Returns a file by its hash or None if it doesn't exist in this
+        backup.
+        """
+
+        tar_info = backup["files"].get(file_hash)
+        if tar_info is None:
+            return None
+
+        if "data" in backup:
+            return tar_info
+        else:
+            # Load the backup's data, because now tar_info points to a file
+            # path instead of a tar file object
+
+            self.__load_backup_data(backup)
+            return backup["files"].get(file_hash)
+
+
+    def __init_metadata_cache(self):
+        """Initializes the backup metadata cache."""
+
+        def handle_metadata(hash, status, fingerprint, path):
+            if status == _FILE_STATUS_EXTERN:
+                self.__extern_files[path] = hash
+
+        self.__ok &= _load_metadata(self.__group_path, self.__name, handle_metadata)
+
+        try:
+            # Sort backups in descending order as the most suitable for
+            # looking up extern files
+            backups = sorted((
+                backup for backup in os.listdir(self.__group_path)
+                    if not backup.startswith(".")), reverse = True)
+
+            # We should look first in the first backup, because it contains
+            # all files that haven't changed since the first backup, which
+            # probably the most of all backed up files
+            backups = backups[-1:] + backups[:-1]
+
+            # TODO: check order
+            LOG.debug("Restoring data from the following backups: %s.", ", ".join(backups))
+            self.__backups = [{ "name": backup } for backup in backups ]
+        except Exception as e:
+            LOG.error("Failed to read metadata for backup group %s: %s.", self.__group_path, e)
+
+
+    def __load_backup_data(self, backup):
+        """Loads the specified backup's data."""
+
+        files = backup["files"]
+        files.clear()
+
+        data = None
+        data_path = os.path.join(
+            self.__group_path, backup["name"], _DATA_FILE_NAME)
+
+        LOG.debug("Loading backup data '%s'...", data_path)
+
+        try:
+            if backup["name"] == self.__name:
+                data = self.__data
+            else:
+                data = tarfile.open(data_path, "r:bz2")
+
+            paths = backup["paths"]
+
+            for tar_info in data:
+                hash = paths.get("/" + tar_info.name)
+                if hash is not None:
+                    files[hash] = tar_info
+        except Exception as e:
+            LOG.error("Failed to load backup data '%s': %s.", data_path, psys.e(e))
+        else:
+            LOG.debug("Backup data '%s' has been successfully loaded.", data_path)
+        finally:
+            backup["data"] = data
+            del backup["paths"]
+
+
+    def __load_backup_metadata(self, backup):
+        """Loads metadata for the specified backup."""
+
+        paths = backup["paths"] = {}
+        files = backup["files"] = {}
+
+        def handle_metadata(hash, status, fingerprint, path):
+            if status == _FILE_STATUS_UNIQUE:
+                files[hash] = path
+                paths[path] = hash
+
+        _load_metadata(self.__group_path, backup["name"], handle_metadata)
+
+
+    def __restore_extern_file(self, tar_info, file_hash):
+        """Restores the specified extern file."""
+
+        LOG.debug("Looking up for extern file '%s' with hash %s...",
+            tar_info.name, file_hash)
+
+        for backup in self.__backups:
+            if "files" not in backup:
+                self.__load_backup_metadata(backup)
+
+            extern_tar_info = self.__get_extern_file(backup, file_hash)
+            if extern_tar_info is not None:
+                extern_tar_info = copy.copy(extern_tar_info)
+                extern_tar_info.name = tar_info.name
+
+                try:
+                    backup["data"].extract(extern_tar_info,
+                        path = self.__restore_path, set_attrs = False)
+                except Exception as e:
+                    raise Error("Unable to extract the file from backup: {}.", e)
+                else:
+                    break
+        else:
+            raise Error("Unable to find the file: backup is corrupted.")
+
+
+# TODO
+#        directories = [] 
+#
+#        if members is None:
+#            members = self 
+#
+#        for tarinfo in members:
+#            if tarinfo.isdir():
+#                # Extract directories with a safe mode.
+#                directories.append(tarinfo)
+#                tarinfo = copy.copy(tarinfo)
+#                tarinfo.mode = 0o700
+#            # Do not set_attrs directories, as we will do that further down
+#            self.extract(tarinfo, path, set_attrs=not tarinfo.isdir())
+#
+#        # Reverse sort directories.
+#        directories.sort(key=lambda a: a.name)
+#        directories.reverse()
+#
+#        # Set correct owner, mtime and filemode on directories.
+#        for tarinfo in directories:
+#            dirpath = os.path.join(path, tarinfo.name)
+#            try:
+#                self.chown(tarinfo, dirpath)
+#                self.utime(tarinfo, dirpath)
+#                self.chmod(tarinfo, dirpath)
+#            except ExtractError as e:
+#                if self.errorlevel > 1: 
+#                    raise
+#                else:
+#                    self._dbg(1, "tarfile: %s" % e)
+
+# File
+#        if set_attrs:
+#            self.chown(tarinfo, targetpath)
+#            if not tarinfo.issym():
+#                self.chmod(tarinfo, targetpath)
+#                self.utime(tarinfo, targetpath)
+
+
 class Backup:
-    """Represents a single backup."""
+    """Controls backup creation."""
 
-    MODE_READ = "read"
-    """Reading mode."""
-
-    MODE_WRITE = "write"
-    """Writing mode."""
-
-
-    __STATE_OPENED = "opened"
-    """Opened backup object state."""
-
-    __STATE_COMMITTED = "committed"
-    """Committed backup state."""
-
-    __STATE_CLOSED = "closed"
-    """Closed backup object state."""
-
-
-    __DATA_FILE_NAME = "data.tar.bz2"
-    """Name of backup data file."""
-
-    __METADATA_FILE_NAME = "metadata.bz2"
-    """Name of backup metadata file."""
-
-
-    __FILE_STATUS_EXTERN = "extern"
-    """Extern file status."""
-
-    __FILE_STATUS_UNIQUE = "unique"
-    """Unique file status."""
-
-
-    def __init__(self, group_path, name, mode, config):
+    def __init__(self, group_path, name, config):
         # Backup name
         self.__name = name
 
@@ -67,10 +353,7 @@ class Backup:
         self.__path = os.path.join(group_path, "." + name)
 
         # Current object state
-        self.__state = self.__STATE_OPENED
-
-        # Backup data open mode
-        self.__mode = mode
+        self.__state = _STATE_OPENED
 
 
         # Backup data file
@@ -90,50 +373,42 @@ class Backup:
         self.__config = config
 
 
-        LOG.debug("Opening backup %s/%s in %s mode...", group_path, name, mode)
+        LOG.debug("Creating backup %s/%s...", group_path, name)
 
-        if mode == self.MODE_READ:
-            raise Exception("TODO")
-        elif mode == self.MODE_WRITE:
-            self.__load_all_backup_metadata(self.__config["trust_modify_time"])
+        self.__load_all_backup_metadata(self.__config["trust_modify_time"])
+
+        try:
+            os.mkdir(self.__path)
+        except Exception as e:
+            raise Error("Unable to create a backup directory '{}': {}.",
+                self.__path, psys.e(e))
+
+        try:
+            data_path = os.path.join(self.__path, _DATA_FILE_NAME)
 
             try:
-                os.mkdir(self.__path)
+                self.__data = tarfile.open(data_path, "w:bz2")
             except Exception as e:
-                raise Error("Unable to create a backup directory '{}': {}.",
-                    self.__path, psys.e(e))
+                raise Error("Unable to create a backup data tar archive '{}': {}.",
+                    data_path, psys.e(e))
+
+            metadata_path = os.path.join(self.__path, _METADATA_FILE_NAME)
 
             try:
-                data_path = os.path.join(self.__path, self.__DATA_FILE_NAME)
-
-                try:
-                    self.__data = tarfile.open(data_path, "w:bz2")
-                except Exception as e:
-                    raise Error("Unable to create a backup data tar archive '{}': {}.",
-                        data_path, psys.e(e))
-
-                metadata_path = os.path.join(self.__path, self.__METADATA_FILE_NAME)
-
-                try:
-                    self.__metadata = bz2.BZ2File(metadata_path, mode = "w")
-                except Exception as e:
-                    raise Error("Unable to create a backup metadata file '{}': {}.",
-                        metadata_path, psys.e(e))
-            except:
-                self.close()
-                raise
-        else:
-            raise LogicalError()
+                self.__metadata = bz2.BZ2File(metadata_path, mode = "w")
+            except Exception as e:
+                raise Error("Unable to create a backup metadata file '{}': {}.",
+                    metadata_path, psys.e(e))
+        except:
+            self.close()
+            raise
 
 
     def add_file(self, path, stat_info, link_target, file_obj):
         """Adds a file to the storage."""
 
-        if self.__state != self.__STATE_OPENED:
+        if self.__state != _STATE_OPENED:
             raise Error("The backup file is closed.")
-
-        if self.__mode != self.MODE_WRITE:
-            raise Error("The backup is opened in read-only mode.")
 
         # Limitation due to using text files for metadata
         if "\r" in path or "\n" in path:
@@ -158,7 +433,7 @@ class Backup:
 
             metadata = "{hash} {status} {fingerprint} {path}\n".format(
                 hash = file_hash, fingerprint = fingerprint, path = path,
-                status = self.__FILE_STATUS_EXTERN if extern else self.__FILE_STATUS_UNIQUE)
+                status = _FILE_STATUS_EXTERN if extern else _FILE_STATUS_UNIQUE)
 
             self.__metadata.write(metadata.encode(_ENCODING))
 
@@ -166,30 +441,29 @@ class Backup:
     def close(self):
         """Closes the object."""
 
-        if self.__state != self.__STATE_CLOSED:
-            try:
-                if self.__state != self.__STATE_COMMITTED:
-                    try:
-                        self.__close()
-                    except Exception as e:
-                        LOG.error("Failed to close '%s' backup object: %s",
-                            self.__name, psys.e(e))
+        if self.__state == _STATE_CLOSED:
+            return
 
-                    shutil.rmtree(self.__path, onerror = lambda func, path, excinfo:
-                        LOG.error("Failed to remove '%s' backup's temporary data '%s': %s.",
-                            self.__name, path, psys.e(excinfo[1])))
-            finally:
-                self.__state = self.__STATE_CLOSED
+        try:
+            if self.__state != _STATE_COMMITTED:
+                try:
+                    self.__close()
+                except Exception as e:
+                    LOG.error("Failed to close '%s' backup object: %s",
+                        self.__name, psys.e(e))
+
+                shutil.rmtree(self.__path, onerror = lambda func, path, excinfo:
+                    LOG.error("Failed to remove '%s' backup's temporary data '%s': %s.",
+                        self.__name, path, psys.e(excinfo[1])))
+        finally:
+            self.__state = _STATE_CLOSED
 
 
     def commit(self):
         """Commits the changes."""
 
-        if self.__state != self.__STATE_OPENED:
+        if self.__state != _STATE_OPENED:
             raise Error("The backup file is closed.")
-
-        if self.__mode != self.MODE_WRITE:
-            raise Error("The backup is opened in read-only mode.")
 
         try:
             self.__close()
@@ -204,9 +478,10 @@ class Backup:
             else:
                 self.__path = backup_path
 
-            self.__state = self.__STATE_COMMITTED
+            self.__state = _STATE_COMMITTED
         finally:
             self.close()
+
 
 
     def __close(self):
@@ -293,26 +568,14 @@ class Backup:
     def __load_backup_metadata(self, name, with_prev_files_info):
         """Loads the specified backup's metadata."""
 
-        metadata_path = os.path.join(
-            self.__group_path, name, self.__METADATA_FILE_NAME)
+        def handle_metadata(hash, status, fingerprint, path):
+            if status == _FILE_STATUS_UNIQUE:
+                self.__hashes.add(hash)
 
-        try:
-            with bz2.BZ2File(metadata_path, mode = "r") as metadata_file:
-                for line in metadata_file:
-                    line = line.rstrip(b"\r\n")
-                    if not line:
-                        continue
+            if with_prev_files_info:
+                self.__prev_files[path] = ( hash, fingerprint )
 
-                    hash, status, fingerprint, path = \
-                        line.decode(_ENCODING).split(" ", 4)
-
-                    if status == self.__FILE_STATUS_UNIQUE:
-                        self.__hashes.add(hash)
-
-                    if with_prev_files_info:
-                        self.__prev_files[path] = ( hash, fingerprint )
-        except Exception as e:
-            LOG.error("Failed to load metadata '%s': %s.", metadata_path, psys.e(e))
+        _load_metadata(self.__group_path, name, handle_metadata)
 
 
 
@@ -397,3 +660,76 @@ def _get_tar_info(path, stat_info, link_target, extern):
         tar_info.devminor = os.minor(stat_info.st_rdev)
 
     return tar_info
+
+
+def _load_metadata(group_path, name, handle_metadata):
+    """Loads metadata of the specified backup."""
+
+    ok = False
+
+    metadata_path = os.path.join(
+        group_path, name, _METADATA_FILE_NAME)
+
+    LOG.debug("Load backup metadata '%s'...", metadata_path)
+
+    try:
+        with bz2.BZ2File(metadata_path, mode = "r") as metadata_file:
+            for line in metadata_file:
+                line = line.rstrip(b"\r\n")
+                if not line:
+                    continue
+
+                handle_metadata(*line.decode(_ENCODING).split(" ", 4))
+
+        ok = True
+    except Exception as e:
+        LOG.error("Failed to load backup metadata '%s': %s.", metadata_path, psys.e(e))
+    else:
+        LOG.debug("Backup metadata '%s' has been successfully loaded.", metadata_path)
+
+    return ok
+
+
+# TODO: cache grp and pwd
+
+# TODO
+#def chown(self, tarinfo, targetpath):
+#    """Set owner of targetpath according to tarinfo.
+#    """
+#    if pwd and hasattr(os, "geteuid") and os.geteuid() == 0:
+#        # We have to be root to do so.
+#        try:
+#            g = grp.getgrnam(tarinfo.gname)[2]
+#        except KeyError:
+#            g = tarinfo.gid
+#        try:
+#            u = pwd.getpwnam(tarinfo.uname)[2]
+#        except KeyError:
+#            u = tarinfo.uid
+#        try:
+#            if tarinfo.issym() and hasattr(os, "lchown"):
+#                os.lchown(targetpath, u, g)
+#            else:
+#                if sys.platform != "os2emx":
+#                    os.chown(targetpath, u, g)
+#        except EnvironmentError as e:
+#            raise ExtractError("could not change owner")
+#
+#def chmod(self, tarinfo, targetpath):
+#    """Set file permissions of targetpath according to tarinfo.
+#    """
+#    if hasattr(os, 'chmod'):
+#        try:
+#            os.chmod(targetpath, tarinfo.mode)
+#        except EnvironmentError as e:
+#            raise ExtractError("could not change mode")
+#
+#def utime(self, tarinfo, targetpath):
+#    """Set modification time of targetpath according to tarinfo.
+#    """
+#    if not hasattr(os, 'utime'):
+#        return
+#    try:
+#        os.utime(targetpath, (tarinfo.mtime, tarinfo.mtime))
+#    except EnvironmentError as e:
+#        raise ExtractError("could not change modification time")

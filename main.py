@@ -9,6 +9,7 @@ import logging
 from pyvsb.backuper import Backuper
 from pyvsb.config import get_config
 from pyvsb.core import Error
+from pyvsb.restorer import Restorer
 
 class OutputHandler(logging.Handler):
     """
@@ -48,25 +49,35 @@ def main():
     args = parser.parse_args()
 
     try:
-        try:
-            config = get_config(args.config)
-        except Exception as e:
-            raise Error("Error while reading configuration file {}: {}",
-                args.config, e)
-
         # TODO
         setup(True)
+        # TODO
+        success = False
 
         if args.restore:
-            TODO
+            try:
+                with Restorer(args.restore) as restorer:
+                    success = restorer.restore()
+            except Exception as e:
+                raise Error("Backup failed: {}", e)
         else:
+            try:
+                config = get_config(args.config)
+            except Exception as e:
+                raise Error("Error while reading configuration file {}: {}",
+                    args.config, e)
+
             try:
                 with Backuper(config) as backuper:
                     backuper.backup()
             except Exception as e:
                 raise Error("Backup failed: {}", e)
     except Exception as e:
+        # TODO
+        fsdfs
         sys.exit(str(e))
+    else:
+        sys.exit(int(not success))
 
 
 def setup(debug_mode = False, filter = None, max_log_name_length = 16, level = None):

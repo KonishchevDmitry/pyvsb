@@ -8,12 +8,13 @@ import time
 
 import psys
 
-from .backup import Backup
+from .backup import Backup, Restore
 from .core import Error, LogicalError
 
 LOG = logging.getLogger(__name__)
 
 
+# TODO: may be rename to backup group
 class Storage:
     """Represents a backup storage."""
 
@@ -27,6 +28,7 @@ class Storage:
     # TODO
     def __init__(self, config, mode):
         self.__config = config
+        self.__mode = mode # TODO
 
         if mode == self.MODE_BACKUP:
             groups = self.__get_groups()
@@ -45,9 +47,11 @@ class Storage:
             self.__backup = Backup(
                 self.__get_group_path(group),
                 time.strftime("%Y.%m.%d-%H:%M:%S", time.localtime()),
-                Backup.MODE_WRITE, config)
+                config)
         elif mode == self.MODE_RESTORE:
-            TODO
+            self.__backup = Restore(
+                self.__get_group_path(self.__config["backup_group"]),
+                self.__config["backup"], config)
         else:
             raise LogicalError()
 
@@ -69,30 +73,36 @@ class Storage:
 
         self.__backup.commit()
 
-        try:
-            groups = []
+        if self.__mode == self.MODE_BACKUP:
+            try:
+                groups = []
 
-            for group in self.__get_groups(reverse = True):
-                group_path = self.__get_group_path(group)
+                for group in self.__get_groups(reverse = True):
+                    group_path = self.__get_group_path(group)
 
-                try:
-                    for backup in os.listdir(group_path):
-                        if not backup.startswith("."):
-                            groups.append(group)
-                            break
-                except EnvironmentError as e:
-                    if e.errno != errno.ENOENT:
-                        LOG.error(
-                            "Error while rotating backup groups: "
-                            "Unable to read backup group directory %s: %s.",
-                            group_path, psys.e(e))
+                    try:
+                        for backup in os.listdir(group_path):
+                            if not backup.startswith("."):
+                                groups.append(group)
+                                break
+                    except EnvironmentError as e:
+                        if e.errno != errno.ENOENT:
+                            LOG.error(
+                                "Error while rotating backup groups: "
+                                "Unable to read backup group directory %s: %s.",
+                                group_path, psys.e(e))
 
-            for group in groups[self.__config["max_backup_groups"]:]:
-                LOG.info("Removing backup group %s...", group)
-                shutil.rmtree(self.__get_group_path(group), onerror = lambda func, path, excinfo:
-                    LOG.error("Failed to remove '%s' backup group: %s.", path, psys.e(excinfo[1])))
-        except Exception as e:
-            LOG.error("Failed to rotate backup groups: %s", e)
+                for group in groups[self.__config["max_backup_groups"]:]:
+                    LOG.info("Removing backup group %s...", group)
+                    shutil.rmtree(self.__get_group_path(group), onerror = lambda func, path, excinfo:
+                        LOG.error("Failed to remove '%s' backup group: %s.", path, psys.e(excinfo[1])))
+            except Exception as e:
+                LOG.error("Failed to rotate backup groups: %s", e)
+
+
+    # TODO
+    def restore(self):
+        return self.__backup.restore()
 
 
     def __create_group(self):
