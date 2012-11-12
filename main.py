@@ -9,7 +9,7 @@ import logging
 from pyvsb.backuper import Backuper
 from pyvsb.config import get_config
 from pyvsb.core import Error
-from pyvsb.restorer import Restorer
+from pyvsb.backup import Restore
 
 class OutputHandler(logging.Handler):
     """
@@ -56,10 +56,16 @@ def main():
 
         if args.restore:
             try:
-                with Restorer(args.restore) as restorer:
+                # TODO: links here and everywhere (rmtree)
+
+                backup_path = os.path.abspath(args.restore)
+                backup_name = os.path.basename(backup_path),
+                backup_group_path = os.path.dirname(backup_path)
+
+                with Restore(backup_group_path, backup_name, "restore") as restorer:
                     success = restorer.restore()
             except Exception as e:
-                raise Error("Backup failed: {}", e)
+                raise Error("Restore failed: {}", e)
         else:
             try:
                 config = get_config(args.config)

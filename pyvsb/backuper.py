@@ -34,7 +34,7 @@ class Backuper:
             self.__open_flags |= os.O_NOATIME
 
         # Backup storage abstraction
-        self.__storage = Storage(config, Storage.MODE_BACKUP)
+        self.__storage = Storage(config)
 
 
     def __enter__(self):

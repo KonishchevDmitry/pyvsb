@@ -18,42 +18,27 @@ LOG = logging.getLogger(__name__)
 class Storage:
     """Represents a backup storage."""
 
-    MODE_BACKUP = "backup"
-    """Backup mode."""
-
-    MODE_RESTORE = "restore"
-    """Restore mode."""
-
-
     # TODO
-    def __init__(self, config, mode):
+    def __init__(self, config):
         self.__config = config
-        self.__mode = mode # TODO
 
-        if mode == self.MODE_BACKUP:
-            groups = self.__get_groups()
+        groups = self.__get_groups()
 
-            if groups:
-                group = groups[-1]
-                backups = self.__get_backups(group)
+        if groups:
+            group = groups[-1]
+            backups = self.__get_backups(group)
 
-                if len(backups) >= self.__config["max_backups"]:
-                    group = self.__create_group()
-                else:
-                    LOG.info("Using backup group %s.", group)
-            else:
+            if len(backups) >= self.__config["max_backups"]:
                 group = self.__create_group()
-
-            self.__backup = Backup(
-                self.__get_group_path(group),
-                time.strftime("%Y.%m.%d-%H:%M:%S", time.localtime()),
-                config)
-        elif mode == self.MODE_RESTORE:
-            self.__backup = Restore(
-                self.__get_group_path(self.__config["backup_group"]),
-                self.__config["backup"], config)
+            else:
+                LOG.info("Using backup group %s.", group)
         else:
-            raise LogicalError()
+            group = self.__create_group()
+
+        self.__backup = Backup(
+            self.__get_group_path(group),
+            time.strftime("%Y.%m.%d-%H:%M:%S", time.localtime()),
+            config)
 
 
     def add_file(self, path, stat_info, link_target = "", file_obj = None):
@@ -73,36 +58,30 @@ class Storage:
 
         self.__backup.commit()
 
-        if self.__mode == self.MODE_BACKUP:
-            try:
-                groups = []
+        try:
+            groups = []
 
-                for group in self.__get_groups(reverse = True):
-                    group_path = self.__get_group_path(group)
+            for group in self.__get_groups(reverse = True):
+                group_path = self.__get_group_path(group)
 
-                    try:
-                        for backup in os.listdir(group_path):
-                            if not backup.startswith("."):
-                                groups.append(group)
-                                break
-                    except EnvironmentError as e:
-                        if e.errno != errno.ENOENT:
-                            LOG.error(
-                                "Error while rotating backup groups: "
-                                "Unable to read backup group directory %s: %s.",
-                                group_path, psys.e(e))
+                try:
+                    for backup in os.listdir(group_path):
+                        if not backup.startswith("."):
+                            groups.append(group)
+                            break
+                except EnvironmentError as e:
+                    if e.errno != errno.ENOENT:
+                        LOG.error(
+                            "Error while rotating backup groups: "
+                            "Unable to read backup group directory %s: %s.",
+                            group_path, psys.e(e))
 
-                for group in groups[self.__config["max_backup_groups"]:]:
-                    LOG.info("Removing backup group %s...", group)
-                    shutil.rmtree(self.__get_group_path(group), onerror = lambda func, path, excinfo:
-                        LOG.error("Failed to remove '%s' backup group: %s.", path, psys.e(excinfo[1])))
-            except Exception as e:
-                LOG.error("Failed to rotate backup groups: %s", e)
-
-
-    # TODO
-    def restore(self):
-        return self.__backup.restore()
+            for group in groups[self.__config["max_backup_groups"]:]:
+                LOG.info("Removing backup group %s...", group)
+                shutil.rmtree(self.__get_group_path(group), onerror = lambda func, path, excinfo:
+                    LOG.error("Failed to remove '%s' backup group: %s.", path, psys.e(excinfo[1])))
+        except Exception as e:
+            LOG.error("Failed to rotate backup groups: %s", e)
 
 
     def __create_group(self):

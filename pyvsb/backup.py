@@ -52,7 +52,7 @@ _FILE_STATUS_UNIQUE = "unique"
 class Restore:
     """Controls backup restoring."""
 
-    def __init__(self, group_path, name, config):
+    def __init__(self, group_path, name, restore_path):
         # Backup name
         self.__name = name
 
@@ -60,7 +60,7 @@ class Restore:
         self.__group_path = group_path
 
         # Restore path
-        self.__restore_path = config["restore_path"]
+        self.__restore_path = restore_path
 
         # Current object state
         self.__state = _STATE_OPENED
@@ -95,6 +95,15 @@ class Restore:
         except:
             self.close()
             raise
+
+
+    def __enter__(self):
+        return self
+
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+        return False
 
 
     def close(self):
