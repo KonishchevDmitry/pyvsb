@@ -49,6 +49,233 @@ _FILE_STATUS_UNIQUE = "unique"
 
 
 
+class Backup:
+    """Controls backup creation."""
+
+    def __init__(self, config):
+        # Backup config
+        self.__config = config
+
+        # Backup storage abstraction
+        self.__storage = None
+
+        # Backup name
+        self.__name = None
+
+        # Backup group
+        self.__group = None
+
+        # Current object state
+        self.__state = _STATE_OPENED
+
+
+        # Backup data file
+        self.__data = None
+
+        # Backup metadata file
+        self.__metadata = None
+
+        # A set of hashes of all available files in this backup group
+        self.__hashes = set()
+
+        # A map of files from the previous backup to their hashes and
+        # fingerprints.
+        self.__prev_files = {}
+
+
+        self.__storage = Storage(self.__config["backup_root"])
+
+        self.__group, self.__name, path = self.__storage.create_backup(
+            self.__config["max_backups"])
+
+        try:
+            self.__load_all_backup_metadata(self.__config["trust_modify_time"])
+
+            LOG.debug("Creating backup %s in group %s...", self.__name, self.__group)
+
+            data_path = os.path.join(path, _DATA_FILE_NAME)
+
+            try:
+                self.__data = tarfile.open(data_path, "w:bz2")
+            except Exception as e:
+                raise Error("Unable to create a backup data tar archive '{}': {}.",
+                    data_path, psys.e(e))
+
+            metadata_path = os.path.join(path, _METADATA_FILE_NAME)
+
+            try:
+                self.__metadata = bz2.BZ2File(metadata_path, mode = "w")
+            except Exception as e:
+                raise Error("Unable to create a backup metadata file '{}': {}.",
+                    metadata_path, psys.e(e))
+        except:
+            self.close()
+            raise
+
+
+    def add_file(self, path, stat_info, link_target = "", file_obj = None):
+        """Adds a file to the storage."""
+
+        if self.__state != _STATE_OPENED:
+            raise Error("The backup file is closed.")
+
+        # Limitation due to using text files for metadata
+        if "\r" in path or "\n" in path:
+            raise Error(r"File names with '\r' and '\n' aren't supported")
+
+
+        extern = False
+        fingerprint = _get_file_fingerprint(stat_info)
+
+        if file_obj is not None:
+            file_hash = self.__deduplicate(path, stat_info, fingerprint, file_obj)
+            extern = file_hash is not None
+            file_obj = _HashableFile(file_obj)
+
+        tar_info = _get_tar_info(path, stat_info, link_target, extern)
+        self.__data.addfile(tar_info, fileobj = file_obj)
+
+        if file_obj is not None:
+            if not extern:
+                file_hash = file_obj.hash()
+                self.__hashes.add(file_hash)
+
+            metadata = "{hash} {status} {fingerprint} {path}\n".format(
+                hash = file_hash, fingerprint = fingerprint, path = path,
+                status = _FILE_STATUS_EXTERN if extern else _FILE_STATUS_UNIQUE)
+
+            self.__metadata.write(metadata.encode(_ENCODING))
+
+
+    # TODO
+    def close(self):
+        """Closes the object."""
+
+        if self.__state == _STATE_CLOSED:
+            return
+
+        try:
+            if self.__state != _STATE_COMMITTED:
+                try:
+                    self.__close()
+                except Exception as e:
+                    LOG.error("Failed to close '%s' backup object: %s",
+                        self.__name, psys.e(e))
+
+                self.__storage.cancel_backup(self.__group, self.__name)
+        finally:
+            self.__state = _STATE_CLOSED
+
+
+    # TODO
+    def commit(self):
+        """Commits the changes."""
+
+        if self.__state != _STATE_OPENED:
+            raise Error("The backup file is closed.")
+
+        try:
+            self.__close()
+            self.__storage.commit_backup(self.__group, self.__name)
+            self.__storage.rotate_groups(self.__config["max_backup_groups"])
+            self.__state = _STATE_COMMITTED
+        finally:
+            self.close()
+
+
+    def __close(self):
+        """Closes all opened files."""
+
+        try:
+            if self.__data is not None:
+                try:
+                    self.__data.close()
+                except Exception as e:
+                    raise Error("Unable to close backup data file: {}.", psys.e(e))
+        finally:
+            if self.__metadata is not None:
+                try:
+                    self.__metadata.close()
+                except Exception as e:
+                    raise Error("Unable to close backup metadata file: {}.", psys.e(e))
+
+
+    def __deduplicate(self, path, stat_info, fingerprint, file_obj):
+        """Tries to deduplicate the specified file.
+
+        Returns its hash if deduplication succeeded.
+        """
+
+        # No need to deduplicate empty files
+        if stat_info.st_size == 0:
+            return
+
+        # Check modify time
+        if self.__config["trust_modify_time"]:
+            prev_info = self.__prev_files.get(path)
+
+            if prev_info is not None:
+                prev_hash, prev_fingerprint = prev_info
+
+                if fingerprint == prev_fingerprint:
+                    LOG.debug(
+                        "File '%s' hasn't been changed. Make it an extern file with %s hash.",
+                        path, prev_hash)
+
+                    return prev_hash
+
+        # Find files with the same hash -->
+        file_size = 0
+        file_hash = sha1()
+
+        while file_size < stat_info.st_size:
+            data = file_obj.read(
+                min(psys.BUFSIZE, stat_info.st_size - file_size))
+
+            if data:
+                file_size += len(data)
+                file_hash.update(data)
+            elif file_size == stat_info.st_size:
+                break
+            else:
+                raise Error("The file has been truncated during the backup.")
+
+        file_obj.seek(0)
+        file_hash = file_hash.hexdigest()
+
+        if file_hash in self.__hashes:
+            LOG.debug("Make '%s' an extern file with %s hash.", path, file_hash)
+            return file_hash
+        # Find files with the same hash <--
+
+
+    def __load_all_backup_metadata(self, trust_modify_time):
+        """Loads all metadata from previous backups."""
+
+        try:
+            backups = self.__storage.backups(self.__group, reverse = True)
+
+            for backup_id, backup in enumerate(backups):
+                self.__load_backup_metadata(backup,
+                    with_prev_files_info = trust_modify_time and not backup_id)
+        except Exception as e:
+            LOG.error("Failed to load metadata from previous backups: %s.", psys.e(e))
+
+
+    def __load_backup_metadata(self, name, with_prev_files_info):
+        """Loads the specified backup's metadata."""
+
+        def handle_metadata(hash, status, fingerprint, path):
+            if status == _FILE_STATUS_UNIQUE:
+                self.__hashes.add(hash)
+
+            if with_prev_files_info:
+                self.__prev_files[path] = ( hash, fingerprint )
+
+        _load_metadata(self.__storage.backup_path(self.__group, name), handle_metadata)
+
+
+
 class Restore:
     """Controls backup restoring."""
 
@@ -344,239 +571,12 @@ class Restore:
 #                    raise
 #                else:
 #                    self._dbg(1, "tarfile: %s" % e)
-
 # File
 #        if set_attrs:
 #            self.chown(tarinfo, targetpath)
 #            if not tarinfo.issym():
 #                self.chmod(tarinfo, targetpath)
 #                self.utime(tarinfo, targetpath)
-
-
-class Backup:
-    """Controls backup creation."""
-
-    def __init__(self, config):
-        # Backup config
-        self.__config = config
-
-        # Backup storage abstraction
-        self.__storage = None
-
-        # Backup name
-        self.__name = None
-
-        # Backup group
-        self.__group = None
-
-        # Current object state
-        self.__state = _STATE_OPENED
-
-
-        # Backup data file
-        self.__data = None
-
-        # Backup metadata file
-        self.__metadata = None
-
-        # A set of hashes of all available files in this backup group
-        self.__hashes = set()
-
-        # A map of files from the previous backup to their hashes and
-        # fingerprints.
-        self.__prev_files = {}
-
-
-        self.__storage = Storage(self.__config["backup_root"])
-
-        self.__group, self.__name, path = self.__storage.create_backup(
-            self.__config["max_backups"])
-
-        try:
-            self.__load_all_backup_metadata(self.__config["trust_modify_time"])
-
-            LOG.debug("Creating backup %s in group %s...", self.__name, self.__group)
-
-            data_path = os.path.join(path, _DATA_FILE_NAME)
-
-            try:
-                self.__data = tarfile.open(data_path, "w:bz2")
-            except Exception as e:
-                raise Error("Unable to create a backup data tar archive '{}': {}.",
-                    data_path, psys.e(e))
-
-            metadata_path = os.path.join(path, _METADATA_FILE_NAME)
-
-            try:
-                self.__metadata = bz2.BZ2File(metadata_path, mode = "w")
-            except Exception as e:
-                raise Error("Unable to create a backup metadata file '{}': {}.",
-                    metadata_path, psys.e(e))
-        except:
-            self.close()
-            raise
-
-
-    def add_file(self, path, stat_info, link_target = "", file_obj = None):
-        """Adds a file to the storage."""
-
-        if self.__state != _STATE_OPENED:
-            raise Error("The backup file is closed.")
-
-        # Limitation due to using text files for metadata
-        if "\r" in path or "\n" in path:
-            raise Error(r"File names with '\r' and '\n' aren't supported")
-
-
-        extern = False
-        fingerprint = _get_file_fingerprint(stat_info)
-
-        if file_obj is not None:
-            file_hash = self.__deduplicate(path, stat_info, fingerprint, file_obj)
-            extern = file_hash is not None
-            file_obj = _HashableFile(file_obj)
-
-        tar_info = _get_tar_info(path, stat_info, link_target, extern)
-        self.__data.addfile(tar_info, fileobj = file_obj)
-
-        if file_obj is not None:
-            if not extern:
-                file_hash = file_obj.hash()
-                self.__hashes.add(file_hash)
-
-            metadata = "{hash} {status} {fingerprint} {path}\n".format(
-                hash = file_hash, fingerprint = fingerprint, path = path,
-                status = _FILE_STATUS_EXTERN if extern else _FILE_STATUS_UNIQUE)
-
-            self.__metadata.write(metadata.encode(_ENCODING))
-
-
-    # TODO
-    def close(self):
-        """Closes the object."""
-
-        if self.__state == _STATE_CLOSED:
-            return
-
-        try:
-            if self.__state != _STATE_COMMITTED:
-                try:
-                    self.__close()
-                except Exception as e:
-                    LOG.error("Failed to close '%s' backup object: %s",
-                        self.__name, psys.e(e))
-
-                self.__storage.cancel_backup(self.__group, self.__name)
-        finally:
-            self.__state = _STATE_CLOSED
-
-
-    # TODO
-    def commit(self):
-        """Commits the changes."""
-
-        if self.__state != _STATE_OPENED:
-            raise Error("The backup file is closed.")
-
-        try:
-            self.__close()
-            self.__storage.commit_backup(self.__group, self.__name)
-            self.__storage.rotate_groups(self.__config["max_backup_groups"])
-            self.__state = _STATE_COMMITTED
-        finally:
-            self.close()
-
-
-    def __close(self):
-        """Closes all opened files."""
-
-        try:
-            if self.__data is not None:
-                try:
-                    self.__data.close()
-                except Exception as e:
-                    raise Error("Unable to close backup data file: {}.", psys.e(e))
-        finally:
-            if self.__metadata is not None:
-                try:
-                    self.__metadata.close()
-                except Exception as e:
-                    raise Error("Unable to close backup metadata file: {}.", psys.e(e))
-
-
-    def __deduplicate(self, path, stat_info, fingerprint, file_obj):
-        """Tries to deduplicate the specified file.
-
-        Returns its hash if deduplication succeeded.
-        """
-
-        # No need to deduplicate empty files
-        if stat_info.st_size == 0:
-            return
-
-        # Check modify time
-        if self.__config["trust_modify_time"]:
-            prev_info = self.__prev_files.get(path)
-
-            if prev_info is not None:
-                prev_hash, prev_fingerprint = prev_info
-
-                if fingerprint == prev_fingerprint:
-                    LOG.debug(
-                        "File '%s' hasn't been changed. Make it an extern file with %s hash.",
-                        path, prev_hash)
-
-                    return prev_hash
-
-        # Find files with the same hash -->
-        file_size = 0
-        file_hash = sha1()
-
-        while file_size < stat_info.st_size:
-            data = file_obj.read(
-                min(psys.BUFSIZE, stat_info.st_size - file_size))
-
-            if data:
-                file_size += len(data)
-                file_hash.update(data)
-            elif file_size == stat_info.st_size:
-                break
-            else:
-                raise Error("The file has been truncated during the backup.")
-
-        file_obj.seek(0)
-        file_hash = file_hash.hexdigest()
-
-        if file_hash in self.__hashes:
-            LOG.debug("Make '%s' an extern file with %s hash.", path, file_hash)
-            return file_hash
-        # Find files with the same hash <--
-
-
-    def __load_all_backup_metadata(self, trust_modify_time):
-        """Loads all metadata from previous backups."""
-
-        try:
-            backups = self.__storage.backups(self.__group, reverse = True)
-
-            for backup_id, backup in enumerate(backups):
-                self.__load_backup_metadata(backup,
-                    with_prev_files_info = trust_modify_time and not backup_id)
-        except Exception as e:
-            LOG.error("Failed to load metadata from previous backups: %s.", psys.e(e))
-
-
-    def __load_backup_metadata(self, name, with_prev_files_info):
-        """Loads the specified backup's metadata."""
-
-        def handle_metadata(hash, status, fingerprint, path):
-            if status == _FILE_STATUS_UNIQUE:
-                self.__hashes.add(hash)
-
-            if with_prev_files_info:
-                self.__prev_files[path] = ( hash, fingerprint )
-
-        _load_metadata(self.__storage.backup_path(self.__group, name), handle_metadata)
 
 
 
