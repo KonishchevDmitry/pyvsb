@@ -46,6 +46,7 @@ def main():
     parser.add_argument("-r", "--restore", metavar = "BACKUP_PATH",
         default = None, help = "restore the specified backup")
 
+    # TODO: abs path and links here and everywhere (rmtree)
     args = parser.parse_args()
 
     try:

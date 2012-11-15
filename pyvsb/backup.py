@@ -53,7 +53,7 @@ class Restore:
     """Controls backup restoring."""
 
     def __init__(self, backup_path, restore_path):
-        name, group, storage = Storage.from_backup_path(backup_path)
+        name, group, storage = Storage.create(backup_path)
 
         # Backup name
         self.__name = name
@@ -466,7 +466,7 @@ class Backup:
                     LOG.error("Failed to close '%s' backup object: %s",
                         self.__name, psys.e(e))
 
-                self.__storage.rollback_backup(self.__group, self.__name)
+                self.__storage.cancel_backup(self.__group, self.__name)
         finally:
             self.__state = _STATE_CLOSED
 
@@ -481,6 +481,7 @@ class Backup:
         try:
             self.__close()
             self.__storage.commit_backup(self.__group, self.__name)
+            self.__storage.rotate_groups(self.__config["max_backup_groups"])
             self.__state = _STATE_COMMITTED
         finally:
             self.close()

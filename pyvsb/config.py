@@ -107,6 +107,7 @@ def _validate_backup_items(backup_items):
 
 def _validate_path(path):
     """Checks a path specified in the configuration file."""
+    # TODO: links here and everywhere (rmtree)
 
     if not os.path.isabs(path):
         raise Error("Invalid path '{}': it must be an absolute path.", path)

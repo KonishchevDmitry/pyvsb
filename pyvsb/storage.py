@@ -1,8 +1,9 @@
-"""Backup storage abstraction."""
+"""Backup data storage abstraction."""
 
 import errno
 import logging
 import os
+import re
 import shutil
 import time
 
@@ -13,32 +14,100 @@ from .core import Error
 LOG = logging.getLogger(__name__)
 
 
-# TODO: may be rename to backup group
-class Storage:
-    """Represents a backup storage."""
+_GROUP_NAME_FORMAT = "%Y.%m.%d"
+"""Backup group name format."""
 
-    # TODO: all methods
+_GROUP_NAME_RE = re.compile(r"^\d{4}\.\d{2}\.\d{2}$")
+"""Backup group name regular expression."""
+
+
+_BACKUP_NAME_FORMAT = "%Y.%m.%d-%H:%M:%S"
+"""Backup name format."""
+
+_BACKUP_NAME_RE = re.compile(r"^\d{4}\.\d{2}\.\d{2}-\d{2}:\d{2}:\d{2}$")
+"""Backup name regular expression."""
+
+
+
+class Storage:
+    """Backup data storage abstraction."""
+
     def __init__(self, backup_root):
         # Backup root directory
         self.__backup_root = backup_root
 
-    # TODO
+
+    def backup_path(self, group, name, temp = False):
+        """Returns a path to the specified backup."""
+
+        return os.path.join(self.group_path(group),
+            "." + name if temp else name)
+
+
+    def backups(self, group, check = False, reverse = False, orig_error = False):
+        """Returns a list of all backups from the specified group."""
+
+        group_path = self.group_path(group)
+
+        try:
+            return sorted(
+                ( backup for backup in os.listdir(group_path)
+                    if ( _BACKUP_NAME_RE.search(backup) if check else not backup.startswith(".") )),
+                reverse = reverse)
+        except EnvironmentError as e:
+            if orig_error:
+                raise e
+            else:
+                raise Error("Error while reading backup group directory '{}': {}.",
+                    group_path, psys.e(e))
+
+
+    def cancel_backup(self, group, name):
+        """Cancels the specified backup."""
+
+        shutil.rmtree(
+            self.backup_path(group, name, temp = True),
+            onerror = lambda func, path, excinfo:
+                LOG.error("Failed to remove backup temporary data '%s': %s.",
+                    path, psys.e(excinfo[1])))
+
+
+    def commit_backup(self, group, name):
+        """Commits written backup data."""
+
+        cur_path = self.backup_path(group, name, temp = True)
+        new_path = self.backup_path(group, name)
+
+        try:
+            os.rename(cur_path, new_path)
+        except Exception as e:
+            raise Error("Unable to rename backup data directory '{}' to '{}': {}.",
+                cur_path, new_path, psys.e(e))
+
+
+    @staticmethod
+    def create(backup_path):
+        """Creates a Storage object for the specified backup path."""
+
+        backup_name = os.path.basename(backup_path)
+        group_path = os.path.dirname(backup_path)
+        group_name = os.path.basename(group_path)
+        backup_root = os.path.dirname(group_path)
+
+        return backup_name, group_name, Storage(backup_root)
+
+
     def create_backup(self, max_backups):
         """Creates a new backup."""
 
-        name = time.strftime("%Y.%m.%d-%H:%M:%S", time.localtime())
-        LOG.info("Creating a new backup '%s'...", name)
+        name = time.strftime(_BACKUP_NAME_FORMAT, time.localtime())
+        LOG.info("Creating a new backup '%s'.", name)
 
         groups = self.__groups()
 
-        if groups:
+        if groups and len(self.backups(groups[-1], check = True)) < max_backups:
             group = groups[-1]
-            backups = self.backups(group)
-
-            if len(backups) >= max_backups:
-                group = self.__create_group()
-            else:
-                LOG.info("Using backup group %s.", group)
+            LOG.info("Using backup group %s.", group)
         else:
             group = self.__create_group()
 
@@ -51,128 +120,69 @@ class Storage:
                 backup_path, psys.e(e))
 
         return group, name, backup_path
-    def commit_backup(self, group, name):
-        cur_path = self.backup_path(group, name, temp = True)
-        new_path = self.backup_path(group, name)
-
-        try:
-            os.rename(cur_path, new_path)
-        except Exception as e:
-            raise Error("Unable to rename backup data directory '{}' to '{}': {}.",
-                cur_path, new_path, psys.e(e))
-#
-#        try:
-#            groups = []
-#
-#            for group in self.__groups(reverse = True):
-#                group_path = self.group_path(group)
-#
-#                try:
-#                    for backup in os.listdir(group_path):
-#                        if not backup.startswith("."):
-#                            groups.append(group)
-#                            break
-#                except EnvironmentError as e:
-#                    if e.errno != errno.ENOENT:
-#                        LOG.error(
-#                            "Error while rotating backup groups: "
-#                            "Unable to read backup group directory %s: %s.",
-#                            group_path, psys.e(e))
-#
-#            for group in groups[self.__config["max_backup_groups"]:]:
-#                LOG.info("Removing backup group %s...", group)
-#                shutil.rmtree(self.group_path(group), onerror = lambda func, path, excinfo:
-#                    LOG.error("Failed to remove '%s' backup group: %s.", path, psys.e(excinfo[1])))
-#        except Exception as e:
-#            LOG.error("Failed to rotate backup groups: %s", e)
-    def rollback_backup(self, group, name):
-        shutil.rmtree(
-            self.backup_path(group, name, temp = True),
-            onerror = lambda func, path, excinfo:
-                LOG.error("Failed to remove '%s' backup's temporary data '%s': %s.",
-                    name, path, psys.e(excinfo[1])))
-
-
-
-
-    # TODO
-    @staticmethod
-    def from_backup_path(backup_path):
-        # TODO: links here and everywhere (rmtree)
-
-        backup_path = os.path.abspath(backup_path)
-        backup_name = os.path.basename(backup_path)
-        backup_group_path = os.path.dirname(backup_path)
-        backup_group_name = os.path.basename(backup_group_path)
-        backup_root = os.path.dirname(backup_group_path)
-
-        return backup_name, backup_group_name, Storage(backup_root)
-
-
-    def add_file(self, path, stat_info, link_target = "", file_obj = None):
-        """Adds a file to the storage."""
-
-        self.__backup.add_file(path, stat_info, link_target, file_obj)
-
-
-    def backup_path(self, group, name, temp = False):
-        """Returns path to the specified backup."""
-
-        return os.path.join(self.group_path(group),
-            ( "." if temp else "" ) + name)
-
-
-    def backups(self, group, reverse = False):
-        """Returns a list of all backups in the specified group."""
-
-        group_path = self.group_path(group)
-
-        try:
-            return sorted(
-                backup for backup in os.listdir(group_path)
-                    if not backup.startswith("."))
-        except EnvironmentError as e:
-            raise Error("Error while reading backup group directory '{}': {}.",
-                group_path, psys.e(e))
-
-
-    def close(self):
-        """Closes the object."""
-
-        self.__backup.close()
 
 
     def group_path(self, group):
-        """Returns path to the specified group."""
+        """Returns a path to the specified group."""
 
         return os.path.join(self.__backup_root, group)
+
+
+    def rotate_groups(self, max_backup_groups):
+        """Rotates backup groups."""
+
+        try:
+            groups = []
+
+            for group in self.__groups(check = True, reverse = True):
+                try:
+                    if self.backups(group, check = True, orig_error = True):
+                        groups.append(group)
+                except EnvironmentError as e:
+                    if e.errno == errno.ENOENT:
+                        # Just in case: ignore race conditions
+                        pass
+                    else:
+                        LOG.error(
+                            "Error while rotating backup groups: "
+                            "Unable to read backup group '%s': %s.",
+                            group, psys.e(e))
+
+            for group in groups[max_backup_groups:]:
+                LOG.info("Removing backup group '%s'...", group)
+                shutil.rmtree(self.group_path(group),
+                    onerror = lambda func, path, excinfo:
+                        LOG.error("Failed to remove '%s': %s.", path, psys.e(excinfo[1])))
+        except Exception as e:
+            LOG.error("Failed to rotate backup groups: %s", e)
 
 
     def __create_group(self):
         """Creates a new backup group."""
 
-        group = time.strftime("%Y.%m.%d", time.localtime())
-        group_path = self.group_path(group)
+        group = time.strftime(_GROUP_NAME_FORMAT, time.localtime())
+        LOG.info("Creating backup group '%s'.", group)
 
-        LOG.info("Creating backup group %s.", group)
+        group_path = self.group_path(group)
 
         try:
             os.mkdir(group_path)
         except EnvironmentError as e:
             if e.errno != errno.EEXIST:
-                raise Error("Unable to create a new backup group directory '{}': {}.",
+                raise Error("Unable to create a new backup group '{}': {}.",
                     group_path, psys.e(e))
 
         return group
 
 
-    def __groups(self, reverse = False):
+    def __groups(self, check = False, reverse = False):
         """Returns a list of all backup groups."""
 
         try:
-            return sorted((
-                group for group in os.listdir(self.__backup_root)
-                    if not group.startswith(".")), reverse = reverse)
+            return sorted(
+                ( group for group in os.listdir(self.__backup_root)
+                    if ( _GROUP_NAME_RE.search(group) if check else not group.startswith(".") )),
+                reverse = reverse)
         except EnvironmentError as e:
-            raise Error("Error while reading backup directory '{}': {}.",
+            raise Error("Error while reading backup root directory '{}': {}.",
                 self.__backup_root, psys.e(e))
