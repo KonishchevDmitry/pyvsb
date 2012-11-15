@@ -12,7 +12,7 @@ import psh
 system = psh.Program("sh", "-c", _defer = False)
 
 from .core import LogicalError
-from .storage import Storage
+from .backup import Backup
 
 LOG = logging.getLogger(__name__)
 
@@ -33,8 +33,8 @@ class Backuper:
         if hasattr(os, "O_NOATIME"):
             self.__open_flags |= os.O_NOATIME
 
-        # Backup storage abstraction
-        self.__storage = Storage(config)
+# TODO
+        self.__backup = Backup(config)
 
 
     def __enter__(self):
@@ -52,21 +52,21 @@ class Backuper:
         try:
             for path, params in self.__config["backup_items"].items():
                 self.__run_script(params.get("before"))
-                self.__backup(path, params.get("filter", []), path)
+                self.__backup_path(path, params.get("filter", []), path)
                 self.__run_script(params.get("after"))
 
-            self.__storage.commit()
+            self.__backup.commit()
         finally:
-            self.__storage.close()
+            self.__backup.close()
 
 
     def close(self):
         """Closes the object."""
 
-        self.__storage.close()
+        self.__backup.close()
 
 
-    def __backup(self, path, filters, toplevel):
+    def __backup_path(self, path, filters, toplevel):
         """Backups the specified path."""
 
         LOG.info("Backing up '%s'...", path)
@@ -88,7 +88,7 @@ class Backuper:
                 else:
                     link_target = ""
 
-                self.__storage.add_file(
+                self.__backup.add_file(
                     path, stat_info, link_target = link_target)
 
             if stat.S_ISDIR(stat_info.st_mode):
@@ -103,13 +103,13 @@ class Backuper:
 
                         if regex.search(file_path[len(prefix):]):
                             if allow:
-                                self.__backup(file_path, filters, toplevel)
+                                self.__backup_path(file_path, filters, toplevel)
                             else:
                                 LOG.info("Filtering out '%s'...", file_path)
 
                             break
                     else:
-                        self.__backup(file_path, filters, toplevel)
+                        self.__backup_path(file_path, filters, toplevel)
         except FileTypeChangedError as e:
             LOG.error("Failed to backup %s: it has suddenly changed its type during the backup.", path)
         except Exception as e:
@@ -163,7 +163,7 @@ class Backuper:
 
         with file_obj:
             stat_info = os.fstat(file_obj.fileno())
-            self.__storage.add_file(path, stat_info, file_obj = file_obj)
+            self.__backup.add_file(path, stat_info, file_obj = file_obj)
 
 
     def __run_script(self, script):

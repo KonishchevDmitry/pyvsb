@@ -7,7 +7,6 @@ import grp
 import logging
 import os
 import pwd
-import shutil
 import stat
 import tarfile
 
@@ -16,6 +15,7 @@ from hashlib import sha1
 import psys
 
 from .core import Error, LogicalError
+from .storage import Storage
 
 LOG = logging.getLogger(__name__)
 
@@ -52,12 +52,17 @@ _FILE_STATUS_UNIQUE = "unique"
 class Restore:
     """Controls backup restoring."""
 
-    def __init__(self, group_path, name, restore_path):
+    def __init__(self, backup_path, restore_path):
+        name, group, storage = Storage.from_backup_path(backup_path)
+
         # Backup name
         self.__name = name
 
-        # Backup group path
-        self.__group_path = group_path
+        # Backup group name
+        self.__group = group
+
+        # Backup storage abstraction
+        self.__storage = storage
 
         # Restore path
         self.__restore_path = restore_path
@@ -80,10 +85,9 @@ class Restore:
 
 
         try:
-            path = os.path.join(group_path, name)
-            data_path = os.path.join(path, _DATA_FILE_NAME)
+            LOG.debug("Opening backup %s for restoring...", backup_path)
 
-            LOG.debug("Opening backup %s for restoring...", path)
+            data_path = os.path.join(backup_path, _DATA_FILE_NAME)
 
             try:
                 self.__data = tarfile.open(data_path, "r:bz2")
@@ -214,14 +218,13 @@ class Restore:
             if status == _FILE_STATUS_EXTERN:
                 self.__extern_files[path] = hash
 
-        self.__ok &= _load_metadata(self.__group_path, self.__name, handle_metadata)
+        self.__ok &= _load_metadata(
+            self.__storage.backup_path(self.__group, self.__name), handle_metadata)
 
         try:
             # Sort backups in descending order as the most suitable for
             # looking up extern files
-            backups = sorted((
-                backup for backup in os.listdir(self.__group_path)
-                    if not backup.startswith(".")), reverse = True)
+            backups = self.__storage.backups(self.__group, reverse = True)
 
             # We should look first in the first backup, because it contains
             # all files that haven't changed since the first backup, which
@@ -232,7 +235,7 @@ class Restore:
             LOG.debug("Restoring data from the following backups: %s.", ", ".join(backups))
             self.__backups = [{ "name": backup } for backup in backups ]
         except Exception as e:
-            LOG.error("Failed to read metadata for backup group %s: %s.", self.__group_path, e)
+            LOG.error("Failed to read metadata for backup group %s: %s.", self.__group, e)
 
 
     def __load_backup_data(self, backup):
@@ -243,7 +246,7 @@ class Restore:
 
         data = None
         data_path = os.path.join(
-            self.__group_path, backup["name"], _DATA_FILE_NAME)
+            self.__storage.backup_path(self.__group, backup["name"]), _DATA_FILE_NAME)
 
         LOG.debug("Loading backup data '%s'...", data_path)
 
@@ -279,7 +282,8 @@ class Restore:
                 files[hash] = path
                 paths[path] = hash
 
-        _load_metadata(self.__group_path, backup["name"], handle_metadata)
+        backup_path = self.__storage.backup_path(self.__group, backup["name"])
+        _load_metadata(backup_path, handle_metadata)
 
 
     def __restore_extern_file(self, tar_info, file_hash):
@@ -289,6 +293,7 @@ class Restore:
             tar_info.name, file_hash)
 
         for backup in self.__backups:
+            # TODO: load all that match extern files
             if "files" not in backup:
                 self.__load_backup_metadata(backup)
 
@@ -351,15 +356,18 @@ class Restore:
 class Backup:
     """Controls backup creation."""
 
-    def __init__(self, group_path, name, config):
+    def __init__(self, config):
+        # Backup config
+        self.__config = config
+
+        # Backup storage abstraction
+        self.__storage = None
+
         # Backup name
-        self.__name = name
+        self.__name = None
 
-        # Backup group path
-        self.__group_path = group_path
-
-        # Current backup path
-        self.__path = os.path.join(group_path, "." + name)
+        # Backup group
+        self.__group = None
 
         # Current object state
         self.__state = _STATE_OPENED
@@ -378,22 +386,18 @@ class Backup:
         # fingerprints.
         self.__prev_files = {}
 
-        # TODO
-        self.__config = config
 
+        self.__storage = Storage(self.__config["backup_root"])
 
-        LOG.debug("Creating backup %s/%s...", group_path, name)
-
-        self.__load_all_backup_metadata(self.__config["trust_modify_time"])
+        self.__group, self.__name, path = self.__storage.create_backup(
+            self.__config["max_backups"])
 
         try:
-            os.mkdir(self.__path)
-        except Exception as e:
-            raise Error("Unable to create a backup directory '{}': {}.",
-                self.__path, psys.e(e))
+            self.__load_all_backup_metadata(self.__config["trust_modify_time"])
 
-        try:
-            data_path = os.path.join(self.__path, _DATA_FILE_NAME)
+            LOG.debug("Creating backup %s in group %s...", self.__name, self.__group)
+
+            data_path = os.path.join(path, _DATA_FILE_NAME)
 
             try:
                 self.__data = tarfile.open(data_path, "w:bz2")
@@ -401,7 +405,7 @@ class Backup:
                 raise Error("Unable to create a backup data tar archive '{}': {}.",
                     data_path, psys.e(e))
 
-            metadata_path = os.path.join(self.__path, _METADATA_FILE_NAME)
+            metadata_path = os.path.join(path, _METADATA_FILE_NAME)
 
             try:
                 self.__metadata = bz2.BZ2File(metadata_path, mode = "w")
@@ -413,7 +417,7 @@ class Backup:
             raise
 
 
-    def add_file(self, path, stat_info, link_target, file_obj):
+    def add_file(self, path, stat_info, link_target = "", file_obj = None):
         """Adds a file to the storage."""
 
         if self.__state != _STATE_OPENED:
@@ -447,6 +451,7 @@ class Backup:
             self.__metadata.write(metadata.encode(_ENCODING))
 
 
+    # TODO
     def close(self):
         """Closes the object."""
 
@@ -461,13 +466,12 @@ class Backup:
                     LOG.error("Failed to close '%s' backup object: %s",
                         self.__name, psys.e(e))
 
-                shutil.rmtree(self.__path, onerror = lambda func, path, excinfo:
-                    LOG.error("Failed to remove '%s' backup's temporary data '%s': %s.",
-                        self.__name, path, psys.e(excinfo[1])))
+                self.__storage.rollback_backup(self.__group, self.__name)
         finally:
             self.__state = _STATE_CLOSED
 
 
+    # TODO
     def commit(self):
         """Commits the changes."""
 
@@ -476,21 +480,10 @@ class Backup:
 
         try:
             self.__close()
-
-            backup_path = os.path.join(self.__group_path, self.__name)
-
-            try:
-                os.rename(self.__path, backup_path)
-            except Exception as e:
-                raise Error("Unable to rename backup data directory '{}' to '{}': {}.",
-                    self.__path, backup_path, psys.e(e))
-            else:
-                self.__path = backup_path
-
+            self.__storage.commit_backup(self.__group, self.__name)
             self.__state = _STATE_COMMITTED
         finally:
             self.close()
-
 
 
     def __close(self):
@@ -563,9 +556,7 @@ class Backup:
         """Loads all metadata from previous backups."""
 
         try:
-            backups = sorted((
-                backup for backup in os.listdir(self.__group_path)
-                    if not backup.startswith(".")), reverse = True)
+            backups = self.__storage.backups(self.__group, reverse = True)
 
             for backup_id, backup in enumerate(backups):
                 self.__load_backup_metadata(backup,
@@ -584,7 +575,7 @@ class Backup:
             if with_prev_files_info:
                 self.__prev_files[path] = ( hash, fingerprint )
 
-        _load_metadata(self.__group_path, name, handle_metadata)
+        _load_metadata(self.__storage.backup_path(self.__group, name), handle_metadata)
 
 
 
@@ -671,13 +662,12 @@ def _get_tar_info(path, stat_info, link_target, extern):
     return tar_info
 
 
-def _load_metadata(group_path, name, handle_metadata):
+def _load_metadata(backup_path, handle_metadata):
     """Loads metadata of the specified backup."""
 
     ok = False
 
-    metadata_path = os.path.join(
-        group_path, name, _METADATA_FILE_NAME)
+    metadata_path = os.path.join(backup_path, _METADATA_FILE_NAME)
 
     LOG.debug("Load backup metadata '%s'...", metadata_path)
 

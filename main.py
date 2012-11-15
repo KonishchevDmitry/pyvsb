@@ -56,24 +56,18 @@ def main():
 
         if args.restore:
             try:
-                # TODO: links here and everywhere (rmtree)
-
-                backup_path = os.path.abspath(args.restore)
-                backup_name = os.path.basename(backup_path),
-                backup_group_path = os.path.dirname(backup_path)
-
-                with Restore(backup_group_path, backup_name, "restore") as restorer:
+                with Restore(args.restore, "restore") as restorer:
                     success = restorer.restore()
             except Exception as e:
                 raise Error("Restore failed: {}", e)
         else:
             try:
-                config = get_config(args.config)
-            except Exception as e:
-                raise Error("Error while reading configuration file {}: {}",
-                    args.config, e)
+                try:
+                    config = get_config(args.config)
+                except Exception as e:
+                    raise Error("Error while reading configuration file {}: {}",
+                        args.config, e)
 
-            try:
                 with Backuper(config) as backuper:
                     backuper.backup()
             except Exception as e:
