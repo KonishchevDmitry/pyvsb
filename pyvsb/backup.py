@@ -147,7 +147,6 @@ class Backup:
             self.__metadata.write(metadata.encode(_ENCODING))
 
 
-    # TODO
     def close(self):
         """Closes the object."""
 
@@ -167,7 +166,6 @@ class Backup:
             self.__state = _STATE_CLOSED
 
 
-    # TODO
     def commit(self):
         """Commits the changes."""
 
@@ -176,9 +174,11 @@ class Backup:
 
         try:
             self.__close()
+
             self.__storage.commit_backup(self.__group, self.__name)
-            self.__storage.rotate_groups(self.__config["max_backup_groups"])
             self.__state = _STATE_COMMITTED
+
+            self.__storage.rotate_groups(self.__config["max_backup_groups"])
         finally:
             self.close()
 
