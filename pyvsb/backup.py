@@ -81,6 +81,9 @@ class Backup:
         # fingerprints.
         self.__prev_files = {}
 
+        # Inodes of hard links added to the backup (to track hard-linked files)
+        self.__hardlink_inodes = {}
+
 
         try:
             self.__storage = Storage(self.__config["backup_root"])
@@ -125,22 +128,40 @@ class Backup:
 
 
         extern = False
-        fingerprint = _get_file_fingerprint(stat_info)
+        hard_link = (
+            self.__config["preserve_hard_links"] and
+            stat.S_ISREG(stat_info.st_mode) and stat_info.st_nlink > 1
+        )
 
-        if file_obj is not None:
+        # Find its hard-linked file in the backup
+        if hard_link:
+            inode = ( stat_info.st_dev, stat_info.st_ino )
+            link_target = self.__hardlink_inodes.get(inode)
+
+        has_data = ( file_obj is not None and link_target is None )
+
+        # Try to deduplicate backed up files
+        if has_data:
             file_obj = _HashableFile(file_obj)
+
+            fingerprint = _get_file_fingerprint(stat_info)
             file_hash = self.__deduplicate(path, stat_info, fingerprint, file_obj)
             extern = file_hash is not None
 
+        # Add the file to the archive
         tar_info = _get_tar_info(path, stat_info, link_target, extern)
         self.__data.addfile(tar_info, fileobj = file_obj)
 
-        if file_obj is not None:
+        # Write the file's metadata
+        if has_data:
             if not extern:
                 file_hash = file_obj.hexdigest()
                 self.__hashes.add(file_hash)
 
             self.__write_file_metadata(path, file_hash, fingerprint, extern)
+
+        if hard_link and link_target is None:
+            self.__hardlink_inodes[inode] = path
 
 
     def close(self):
@@ -406,14 +427,21 @@ class Restore:
             try:
                 file_hash = self.__extern_files.get(path)
 
-                if file_hash is None:
+                if file_hash is not None:
+                    self.__restore_extern_file(tar_info, file_hash)
+                elif tar_info.islnk():
+                    target_path = os.path.join(self.__restore_path, tar_info.linkname)
+
+                    try:
+                        os.link(target_path, os.path.join(self.__restore_path, tar_info.name))
+                    except Exception as e:
+                        raise Error("Unable to create a hard link to '{}': {}.", e)
+                else:
                     try:
                         self.__data.extract(tar_info,
                             path = self.__restore_path, set_attrs = False)
                     except Exception as e:
                         raise Error("Unable to extract the file from backup: {}.", e)
-                else:
-                    self.__restore_extern_file(tar_info, file_hash)
 
                 # TODO
                 #file_path = os.path.join(self.__restore_path, tar_info.name)
@@ -630,13 +658,15 @@ def _get_file_fingerprint(stat_info):
 def _get_tar_info(path, stat_info, link_target = None, extern = False):
     """Returns a TarInfo object for the specified file."""
 
-    # TODO: hard links
-
     tar_info = tarfile.TarInfo()
     stat_mode = stat_info.st_mode
 
     if stat.S_ISREG(stat_mode):
-        tar_info.type = tarfile.REGTYPE
+        if link_target is None:
+            tar_info.type = tarfile.REGTYPE
+        else:
+            tar_info.type = tarfile.LNKTYPE
+            link_target = link_target.lstrip("/")
     elif stat.S_ISDIR(stat_mode):
         tar_info.type = tarfile.DIRTYPE
     elif stat.S_ISLNK(stat_mode):
