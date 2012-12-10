@@ -87,7 +87,7 @@ class Backuper:
                         else:
                             raise
                 else:
-                    link_target = ""
+                    link_target = None
 
                 self.__backup.add_file(
                     path, stat_info, link_target = link_target)

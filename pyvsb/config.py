@@ -9,6 +9,8 @@ import re
 from .core import Error
 
 
+# TODO: HERE
+#os.path.realpath(
 def get_config(path):
     """Parses the configuration file."""
 
@@ -31,6 +33,7 @@ def get_config(path):
     return config
 
 
+# TODO: HERE
 def _get_param(config_obj, config, name, value_type, default = None, validate = lambda value: value):
     """Gets the specified parameter from config."""
 
@@ -53,6 +56,7 @@ def _get_param(config_obj, config, name, value_type, default = None, validate = 
         raise Error("Invalid {} value: {}", config_name, e)
 
 
+# TODO: HERE
 def _validate_backup_items(backup_items):
     """Validates backup items."""
 
@@ -60,13 +64,13 @@ def _validate_backup_items(backup_items):
 
     for path, params in backup_items.items():
         if type(path) != str:
-            raise Error("Invalid value type backup item path.")
+            raise Error("Invalid value type of a backup item path.")
 
         path = _validate_path(path)
         params = copy.deepcopy(params)
 
         if type(params) != dict:
-            raise Error("Invalid value type backup item parameters.")
+            raise Error("Invalid value type of backup item parameters for '{}'.", path)
 
         for param, value in params.items():
             if type(param) != str:
@@ -107,7 +111,6 @@ def _validate_backup_items(backup_items):
 
 def _validate_path(path):
     """Checks a path specified in the configuration file."""
-    # TODO: links here and everywhere (rmtree)
 
     if not os.path.isabs(path):
         raise Error("Invalid path '{}': it must be an absolute path.", path)
@@ -116,7 +119,7 @@ def _validate_path(path):
 
 
 def _validate_positive_integer(value):
-    """Checks that the specified value is non-negative integer."""
+    """Checks that the specified value is a positive integer."""
 
     if value <= 0:
         raise Error("Must be a positive number.")

@@ -57,7 +57,8 @@ def main():
 
         if args.restore:
             try:
-                with Restore(args.restore, "restore") as restorer:
+                # TODO FIXME
+                with Restore(args.restore, os.path.expanduser("~/temp/restore")) as restorer:
                     success = restorer.restore()
             except Exception as e:
                 raise Error("Restore failed: {}", e)
