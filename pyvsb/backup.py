@@ -493,7 +493,6 @@ class Restore:
                         ", ".join(backup["name"] for backup in self.__backups))
 
 
-# TODO: HERE
     def __load_backup_data(self, name, hashes, paths):
         """Loads the specified backup's data."""
 
