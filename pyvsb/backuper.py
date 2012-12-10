@@ -1,4 +1,3 @@
-# TODO
 """Controls backup process."""
 
 import errno
@@ -34,7 +33,7 @@ class Backuper:
         if hasattr(os, "O_NOATIME"):
             self.__open_flags |= os.O_NOATIME
 
-# TODO
+        # Holds backup writing logic
         self.__backup = Backup(config)
 
 
@@ -50,15 +49,21 @@ class Backuper:
     def backup(self):
         """Starts the backup."""
 
+        ok = True
+
         try:
             for path, params in self.__config["backup_items"].items():
-                self.__run_script(params.get("before"))
-                self.__backup_path(path, params.get("filter", []), path)
-                self.__run_script(params.get("after"))
+                if self.__run_script(params.get("before")):
+                    ok &= self.__backup_path(path, params.get("filter", []), path)
+                    ok &= self.__run_script(params.get("after"))
+                else:
+                    ok = False
 
             self.__backup.commit()
         finally:
             self.__backup.close()
+
+        return ok
 
 
     def close(self):
@@ -69,6 +74,8 @@ class Backuper:
 
     def __backup_path(self, path, filters, toplevel):
         """Backups the specified path."""
+
+        ok = True
 
         LOG.info("Backing up '%s'...", path)
 
@@ -113,6 +120,7 @@ class Backuper:
                         self.__backup_path(file_path, filters, toplevel)
         except FileTypeChangedError as e:
             LOG.error("Failed to backup %s: it has suddenly changed its type during the backup.", path)
+            ok = False
         except Exception as e:
             if (
                 isinstance(e, EnvironmentError) and
@@ -121,6 +129,9 @@ class Backuper:
                 LOG.warning("Failed to backup %s: it has suddenly vanished.", path)
             else:
                 LOG.error("Failed to backup %s: %s.", path, psys.e(e))
+                ok = False
+
+        return ok
 
 
     def __backup_file(self, path):
@@ -139,7 +150,7 @@ class Backuper:
                     self.__open_flags & os.O_NOATIME
                 ):
                     # Just disable this flag on a first EPERM error
-                    LOG.error("Got EPERM error. Disabling O_NOATIME for file opening operations...") # TODO: debug
+                    LOG.error("Got EPERM error. Disabling O_NOATIME for file opening operations...")
                     self.__open_flags &= ~os.O_NOATIME
                     fd = eintr_retry(os.open)(path, self.__open_flags)
                 else:
@@ -170,6 +181,8 @@ class Backuper:
     def __run_script(self, script):
         """Runs the specified backup script if it's not None."""
 
+        ok = True
+
         if script is not None:
             LOG.info("Running: %s", script)
 
@@ -177,3 +190,6 @@ class Backuper:
                 system(script)
             except Exception as e:
                 LOG.error(e)
+                ok = False
+
+        return ok
