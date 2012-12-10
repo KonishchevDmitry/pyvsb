@@ -2,10 +2,8 @@
 
 import bz2
 import copy
-import grp
 import logging
 import os
-import pwd
 import stat
 import tarfile
 
@@ -13,6 +11,7 @@ from hashlib import sha1
 
 import psys
 
+from . import utils
 from .core import Error
 from .storage import Storage
 
@@ -694,12 +693,12 @@ def _get_tar_info(path, stat_info, link_target = None, extern = False):
         tar_info.size = 0
 
     try:
-        tar_info.uname = pwd.getpwuid(stat_info.st_uid)[0]
+        tar_info.uname = utils.getpwuid(stat_info.st_uid)[0]
     except KeyError:
         pass
 
     try:
-        tar_info.gname = grp.getgrgid(stat_info.st_gid)[0]
+        tar_info.gname = utils.getgrgid(stat_info.st_gid)[0]
     except KeyError:
         pass
 
