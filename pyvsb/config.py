@@ -11,6 +11,7 @@ from .core import Error
 
 # TODO: HERE
 #os.path.realpath(
+# != "/"
 def get_config(path):
     """Parses the configuration file."""
 

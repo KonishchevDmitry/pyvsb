@@ -1,19 +1,21 @@
-# TODO
-from __future__ import print_function
+"""pyvsb main script."""
+
+from __future__ import print_function # To suppress code checker errors
 
 import argparse
 import os
 import sys
 import logging
 
+from pyvsb.backup import Restore
 from pyvsb.backuper import Backuper
 from pyvsb.config import get_config
 from pyvsb.core import Error
-from pyvsb.backup import Restore
+
 
 class OutputHandler(logging.Handler):
     """
-    Log handler that logs debug and info messages to stdout and all other
+    A log handler that logs debug and info messages to stdout and all other
     messages to stderr.
     """
 
@@ -25,8 +27,8 @@ class OutputHandler(logging.Handler):
         self.acquire()
 
         try:
-            stream = sys.stdout if record.levelno <= logging.INFO else sys.stderr
-            print(self.format(record), file = stream)
+            print(self.format(record),
+                file = sys.stderr if record.levelno > logging.INFO else sys.stdout)
         except:
             self.handleError(record)
         finally:
@@ -46,23 +48,20 @@ def main():
     parser.add_argument("-r", "--restore", metavar = "BACKUP_PATH",
         default = None, help = "restore the specified backup")
 
-    # TODO: abs path and links here and everywhere (rmtree)
+    parser.add_argument("-d", "--debug", action = "store_true",
+        help = "turn on debug messages")
+
+    parser.add_argument("--cron", action = "store_true",
+        help = "show only warning and error messages (intended to be used from cron)")
+
     args = parser.parse_args()
 
-    try:
-        # TODO
-        setup(True)
-        # TODO
-        success = False
 
-        if args.restore:
-            try:
-                # TODO FIXME
-                with Restore(args.restore, os.path.expanduser("~/temp/restore")) as restorer:
-                    success = restorer.restore()
-            except Exception as e:
-                raise Error("Restore failed: {}", e)
-        else:
+    try:
+        log_level = logging.WARNING if args.cron else logging.INFO
+        setup_logging(args.debug, log_level)
+
+        if args.restore is None:
             try:
                 try:
                     config = get_config(args.config)
@@ -71,42 +70,50 @@ def main():
                         args.config, e)
 
                 with Backuper(config) as backuper:
-                    backuper.backup()
+                    success = backuper.backup()
             except Exception as e:
                 raise Error("Backup failed: {}", e)
+        else:
+            try:
+                with Restore(os.path.abspath(args.restore)) as restorer:
+                    success = restorer.restore()
+            except Exception as e:
+                raise Error("Restore failed: {}", e)
     except Exception as e:
-        # TODO
-        fsdfs
-        sys.exit(str(e))
+        if args.debug:
+            raise
+        else:
+            sys.exit(str(e))
     else:
         sys.exit(int(not success))
 
 
-def setup(debug_mode = False, filter = None, max_log_name_length = 16, level = None):
-    """Sets up the logging."""
+def setup_logging(debug_mode = False, level = None, max_log_name_length = 14):
+    """Sets up logging."""
 
     logging.addLevelName(logging.DEBUG,   "D")
     logging.addLevelName(logging.INFO,    "I")
     logging.addLevelName(logging.WARNING, "W")
     logging.addLevelName(logging.ERROR,   "E")
 
-    log = logging.getLogger()
+    log = logging.getLogger("pyvsb")
 
-    log.setLevel(logging.DEBUG if debug_mode else logging.INFO)
-    if level is not None:
-        log.setLevel(level)
-
-    format = ""
     if debug_mode:
-        format += "%(asctime)s.%(msecs)03d (%(filename)12.12s:%(lineno)04d) [%(name){0}.{0}s]: ".format(max_log_name_length)
-    format += "%(levelname)s: %(message)s"
+        level = logging.DEBUG
+    elif level is None:
+        level = logging.INFO
+
+    log.setLevel(level)
+
+    format = "%(levelname)s: %(message)s"
+    if debug_mode:
+        format = "%(asctime)s.%(msecs)03d (%(filename)11.11s:%(lineno)04d) [%(name){0}.{0}s]: {1}".format(max_log_name_length, format)
 
     handler = OutputHandler()
     handler.setFormatter(logging.Formatter(format, "%Y.%m.%d %H:%M:%S"))
-    if filter is not None:
-        handler.addFilter(filter)
 
     log.addHandler(handler)
+
 
 if __name__ == "__main__":
     main()

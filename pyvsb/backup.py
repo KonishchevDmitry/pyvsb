@@ -312,7 +312,7 @@ class Backup:
 class Restore:
     """Controls backup restoring."""
 
-    def __init__(self, backup_path, restore_path):
+    def __init__(self, backup_path):
         # Backup name
         self.__name = None
 
@@ -323,7 +323,7 @@ class Restore:
         self.__storage = None
 
         # Restore path
-        self.__restore_path = restore_path
+        self.__restore_path = None
 
         # Current object state
         self.__state = _STATE_OPENED
@@ -346,6 +346,7 @@ class Restore:
             LOG.info("Restoring backup '%s'...", backup_path)
 
             self.__name, self.__group, self.__storage = Storage.create(backup_path)
+            self.__restore_path = self.__name
 
             data_path = os.path.join(backup_path, _DATA_FILE_NAME)
 

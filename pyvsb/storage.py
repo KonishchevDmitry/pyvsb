@@ -94,6 +94,9 @@ class Storage:
         group_name = os.path.basename(group_path)
         backup_root = os.path.dirname(group_path)
 
+        if group_path == "/":
+            raise Error("Invalid backup group directory: {}.", group_path)
+
         return backup_name, group_name, Storage(backup_root)
 
 
