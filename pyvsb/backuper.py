@@ -119,13 +119,13 @@ class Backuper:
                     else:
                         self.__backup_path(file_path, filters, toplevel)
         except FileTypeChangedError as e:
-            LOG.error("Failed to backup %s: it has suddenly changed its type during the backup.", path)
+            LOG.error("Failed to backup '%s': it has suddenly changed its type during the backup.", path)
             ok = False
         except Exception as e:
             if psys.is_errno(e, (errno.ENOENT, errno.ENOTDIR)) and path != toplevel:
-                LOG.warning("Failed to backup %s: it has suddenly vanished.", path)
+                LOG.warning("Failed to backup '%s': it has suddenly vanished.", path)
             else:
-                LOG.error("Failed to backup %s: %s.", path, psys.e(e))
+                LOG.error("Failed to backup '%s': %s.", path, psys.e(e))
                 ok = False
 
         return ok
