@@ -48,6 +48,7 @@ _FILE_STATUS_UNIQUE = "unique"
 
 
 
+# TODO: don't add empty files to metadata
 class Backup:
     """Controls backup creation."""
 
@@ -322,7 +323,7 @@ class Backup:
 class Restore:
     """Controls backup restoring."""
 
-    def __init__(self, backup_path):
+    def __init__(self, backup_path, restore_path = None):
         # Backup name
         self.__name = None
 
@@ -333,7 +334,7 @@ class Restore:
         self.__storage = None
 
         # Restore path
-        self.__restore_path = None
+        self.__restore_path = restore_path
 
         # Current object state
         self.__state = _STATE_OPENED
@@ -356,7 +357,8 @@ class Restore:
             LOG.info("Restoring backup '%s'...", backup_path)
 
             self.__name, self.__group, self.__storage = Storage.create(backup_path)
-            self.__restore_path = self.__name
+            if self.__restore_path is None:
+                self.__restore_path = self.__name
 
             data_path = os.path.join(backup_path, _DATA_FILE_NAME)
 
