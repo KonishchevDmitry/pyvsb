@@ -81,6 +81,10 @@ class Backup:
         # fingerprints.
         self.__prev_files = {}
 
+
+        # A set of all files added to the backup
+        self.__files = set()
+
         # Inodes of hard links added to the backup (to track hard-linked files)
         self.__hardlink_inodes = {}
 
@@ -120,14 +124,20 @@ class Backup:
         """Adds a file to the backup."""
 
         if self.__state != _STATE_OPENED:
-            raise Error("The backup file is closed.")
+            raise Error("The backup file is closed")
 
         # Limitation due to using text files for metadata
         if "\r" in path or "\n" in path:
             raise Error(r"File names with '\r' or '\n' aren't supported")
 
+        if path in self.__files:
+            raise Error("File is already added to the backup")
+
+        self.__files.add(path)
+
 
         extern = False
+
         hard_link = (
             self.__config["preserve_hard_links"] and
             stat.S_ISREG(stat_info.st_mode) and stat_info.st_nlink > 1
