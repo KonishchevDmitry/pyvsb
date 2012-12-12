@@ -12,6 +12,8 @@ from pyvsb.backuper import Backuper
 from pyvsb.config import get_config
 from pyvsb.core import Error
 
+LOG = logging.getLogger(__name__)
+
 
 class OutputHandler(logging.Handler):
     """
@@ -57,10 +59,10 @@ def main():
     args = parser.parse_args()
 
 
-    try:
-        log_level = logging.WARNING if args.cron else logging.INFO
-        setup_logging(args.debug, log_level)
+    log_level = logging.WARNING if args.cron else logging.INFO
+    setup_logging(args.debug, log_level)
 
+    try:
         if args.restore is None:
             try:
                 try:
@@ -80,11 +82,9 @@ def main():
             except Exception as e:
                 raise Error("Restore failed: {}", e)
     except Exception as e:
-        if args.debug:
-            raise
-        else:
-            sys.exit(str(e))
-    else:
+        (LOG.exception if args.debug else LOG.error)(e)
+        success = False
+    finally:
         sys.exit(int(not success))
 
 
