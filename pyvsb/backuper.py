@@ -122,10 +122,7 @@ class Backuper:
             LOG.error("Failed to backup %s: it has suddenly changed its type during the backup.", path)
             ok = False
         except Exception as e:
-            if (
-                isinstance(e, EnvironmentError) and
-                e.errno in ( errno.ENOENT, errno.ENOTDIR ) and path != toplevel
-            ):
+            if psys.is_errno(e, (errno.ENOENT, errno.ENOTDIR)) and path != toplevel:
                 LOG.warning("Failed to backup %s: it has suddenly vanished.", path)
             else:
                 LOG.error("Failed to backup %s: %s.", path, psys.e(e))
