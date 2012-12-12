@@ -3,30 +3,67 @@
 import grp
 import pwd
 
-_GRP_CACHE = None
-"""grp module cache."""
-
-_PWD_CACHE = None
-"""pwd module cache."""
+_DB_ENTRIES_CACHE = {}
+"""A DB entries cache."""
 
 
 def getgrgid(gid):
     """Cached grp.getgrgid()."""
 
-    global _GRP_CACHE
+    return _get_gr_entries()[2][gid]
 
-    if _GRP_CACHE is None:
-        _GRP_CACHE = { group[2]: group for group in grp.getgrall() }
 
-    return _GRP_CACHE[gid]
+def getgrnam(name):
+    """Cached grp.getgrnam()."""
+
+    return _get_gr_entries()[0][name]
 
 
 def getpwuid(uid):
     """Cached pwd.getpwuid()."""
 
-    global _PWD_CACHE
+    return _get_pwd_entries()[2][uid]
 
-    if _PWD_CACHE is None:
-        _PWD_CACHE = { user[2]: user for user in pwd.getpwall() }
 
-    return _PWD_CACHE[uid]
+def getpwnam(name):
+    """Cached pwd.getpwnam()."""
+
+    return _get_pwd_entries()[0][name]
+
+
+def _get_db_entries(name, func):
+    """Returns cached DB entries.
+
+    grp and pwd modules reread /etc/group and /etc/passwd files on each method
+    call.
+    """
+
+    cache = _DB_ENTRIES_CACHE.get(name)
+
+    if cache is None:
+        id_cache = {}
+        name_cache = {}
+
+        cache = {
+            2: id_cache,
+            0: name_cache,
+        }
+
+        for entry in func():
+            id_cache[entry[2]] = name_cache[entry[0]] = entry
+
+        _DB_ENTRIES_CACHE[name] = cache
+
+    return cache
+
+
+def _get_gr_entries():
+    """Returns cached grp database entries."""
+
+    return _get_db_entries("grp", grp.getgrall)
+
+
+def _get_pwd_entries():
+    """Returns cached pwd database entries."""
+
+    return _get_db_entries("pwd", pwd.getpwall)

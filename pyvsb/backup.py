@@ -2,6 +2,7 @@
 
 import bz2
 import copy
+import errno
 import logging
 import os
 import stat
@@ -408,53 +409,73 @@ class Restore:
         if self.__state != _STATE_OPENED:
             raise Error("The backup file is closed.")
 
+
+        try:
+            os.mkdir(self.__restore_path, 0o700)
+        except Exception as e:
+            raise Error("Unable to create restore directory '{}': {}.",
+                self.__restore_path, psys.e(e))
+
+
         files = []
 
         LOG.debug("Loading the backup's data...")
+
         try:
             for tar_info in self.__data:
                 files.append(tar_info)
         except Exception as e:
-            LOG.error("Failed to load the backup's data: %s.", e)
+            LOG.error("Failed to load the backup's data: %s.", psys.e(e))
             self.__ok = False
         else:
             LOG.debug("The backup's data has been successfully loaded")
 
+
+        directories = []
+
         for tar_info in files:
             path = "/" + tar_info.name
+            restore_path = os.path.join(self.__restore_path, tar_info.name)
+
             LOG.info("Restoring '%s'...", path)
 
             try:
-                file_hash = self.__extern_files.get(path)
-
-                if file_hash is not None:
-                    self.__restore_extern_file(tar_info, file_hash)
+                if tar_info.isdir():
+                    os.makedirs(restore_path, mode = 0o700)
+                    directories.append(tar_info)
                 elif tar_info.islnk():
                     target_path = os.path.join(self.__restore_path, tar_info.linkname)
 
                     try:
-                        os.link(target_path, os.path.join(self.__restore_path, tar_info.name))
+                        os.link(target_path, restore_path)
                     except Exception as e:
-                        raise Error("Unable to create a hard link to '{}': {}.", e)
+                        raise Error("Unable to create a hard link to '{}': {}.", target_path, psys.e(e))
                 else:
-                    try:
-                        self.__data.extract(tar_info,
-                            path = self.__restore_path, set_attrs = False)
-                    except Exception as e:
-                        raise Error("Unable to extract the file from backup: {}.", e)
+                    extern_hash = self.__extern_files.get(path) if tar_info.isreg() else None
 
-                # TODO
-                #file_path = os.path.join(self.__restore_path, tar_info.name)
-                # if os.path.exists(file_path)
-                #self.chown(tarinfo, targetpath)
-                #if not tarinfo.issym():
-                #    self.chmod(tarinfo, targetpath)
-                #    self.utime(tarinfo, targetpath)
+                    try:
+                        if extern_hash is None:
+                            try:
+                                self.__data.extract(tar_info,
+                                    path = self.__restore_path, set_attrs = False)
+                            except Exception as e:
+                                raise Error("Unable to extract the file from backup: {}.", psys.e(e))
+                        else:
+                            self.__restore_extern_file(tar_info, extern_hash)
+                    finally:
+                        self.__restore_attributes(tar_info, restore_path)
             except Exception as e:
                 LOG.error("Failed to restore '%s': %s", path, psys.e(e))
                 self.__ok = False
 
+        directories.sort(key = lambda tar_info: tar_info.name, reverse = True)
+
+        for tar_info in directories:
+            self.__restore_attributes(tar_info,
+                os.path.join(self.__restore_path, tar_info.name))
+
         return self.__ok
+
 
 
     def __init_metadata_cache(self):
@@ -551,6 +572,43 @@ class Restore:
         return hashes, paths
 
 
+    def __restore_attributes(self, tar_info, path):
+        """Restores all attributes of a restored file."""
+
+        if os.geteuid() == 0:
+            try:
+                try:
+                    uid = utils.getpwnam(tar_info.uname)[2]
+                except KeyError:
+                    uid = tar_info.uid
+
+                try:
+                    gid = utils.getgrnam(tar_info.gname)[2]
+                except KeyError:
+                    gid = tar_info.gid
+
+                os.lchown(path, uid, gid)
+            except Exception as e:
+                if not psys.is_errno(e, errno.ENOENT):
+                    LOG.error("Failed to set owner of '%s': %s.", path, psys.e(e))
+                    self.__ok = False
+
+        if not tar_info.issym():
+            try:
+                os.chmod(path, tar_info.mode)
+            except Exception as e:
+                if not psys.is_errno(e, errno.ENOENT):
+                    LOG.error("Failed to change permissions of '%s': %s.", path, psys.e(e))
+                    self.__ok = False
+
+            try:
+                os.utime(path, ( tar_info.mtime, tar_info.mtime ))
+            except Exception as e:
+                if not psys.is_errno(e, errno.ENOENT):
+                    LOG.error("Failed to change access and modification time of '%s': %s.", path, psys.e(e))
+                    self.__ok = False
+
+
     def __restore_extern_file(self, tar_info, file_hash):
         """Restores the specified extern file."""
 
@@ -574,45 +632,6 @@ class Restore:
                 break
         else:
             raise Error("Unable to find the file: backup is corrupted.")
-
-
-# TODO
-#        directories = [] 
-#
-#        if members is None:
-#            members = self 
-#
-#        for tarinfo in members:
-#            if tarinfo.isdir():
-#                # Extract directories with a safe mode.
-#                directories.append(tarinfo)
-#                tarinfo = copy.copy(tarinfo)
-#                tarinfo.mode = 0o700
-#            # Do not set_attrs directories, as we will do that further down
-#            self.extract(tarinfo, path, set_attrs=not tarinfo.isdir())
-#
-#        # Reverse sort directories.
-#        directories.sort(key=lambda a: a.name)
-#        directories.reverse()
-#
-#        # Set correct owner, mtime and filemode on directories.
-#        for tarinfo in directories:
-#            dirpath = os.path.join(path, tarinfo.name)
-#            try:
-#                self.chown(tarinfo, dirpath)
-#                self.utime(tarinfo, dirpath)
-#                self.chmod(tarinfo, dirpath)
-#            except ExtractError as e:
-#                if self.errorlevel > 1: 
-#                    raise
-#                else:
-#                    self._dbg(1, "tarfile: %s" % e)
-# File
-#        if set_attrs:
-#            self.chown(tarinfo, targetpath)
-#            if not tarinfo.issym():
-#                self.chmod(tarinfo, targetpath)
-#                self.utime(tarinfo, targetpath)
 
 
 
@@ -734,47 +753,3 @@ def _load_metadata(backup_path, handle_metadata):
         LOG.debug("Backup metadata '%s' has been successfully loaded.", metadata_path)
 
     return ok
-
-
-# TODO: cache grp and pwd
-# TODO
-#def chown(self, tarinfo, targetpath):
-#    """Set owner of targetpath according to tarinfo.
-#    """
-#    if pwd and hasattr(os, "geteuid") and os.geteuid() == 0:
-#        # We have to be root to do so.
-#        try:
-#            g = grp.getgrnam(tarinfo.gname)[2]
-#        except KeyError:
-#            g = tarinfo.gid
-#        try:
-#            u = pwd.getpwnam(tarinfo.uname)[2]
-#        except KeyError:
-#            u = tarinfo.uid
-#        try:
-#            if tarinfo.issym() and hasattr(os, "lchown"):
-#                os.lchown(targetpath, u, g)
-#            else:
-#                if sys.platform != "os2emx":
-#                    os.chown(targetpath, u, g)
-#        except EnvironmentError as e:
-#            raise ExtractError("could not change owner")
-#
-#def chmod(self, tarinfo, targetpath):
-#    """Set file permissions of targetpath according to tarinfo.
-#    """
-#    if hasattr(os, 'chmod'):
-#        try:
-#            os.chmod(targetpath, tarinfo.mode)
-#        except EnvironmentError as e:
-#            raise ExtractError("could not change mode")
-#
-#def utime(self, tarinfo, targetpath):
-#    """Set modification time of targetpath according to tarinfo.
-#    """
-#    if not hasattr(os, 'utime'):
-#        return
-#    try:
-#        os.utime(targetpath, (tarinfo.mtime, tarinfo.mtime))
-#    except EnvironmentError as e:
-#        raise ExtractError("could not change modification time")
