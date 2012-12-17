@@ -498,7 +498,6 @@ class Restore:
                 self.__extern_files[path] = hash
 
         backup_path = self.__storage.backup_path(self.__group, self.__name)
-
         self.__ok &= _load_metadata(backup_path, handle_metadata)
 
         if self.__extern_files:
@@ -510,7 +509,9 @@ class Restore:
                 extern_hashes = set(self.__extern_files.values())
 
                 for name in backups:
-                    hashes, paths = self.__load_backup_metadata(backup_path)
+                    hashes, paths = self.__load_backup_metadata(
+                        self.__storage.backup_path(self.__group, name))
+
                     hashes &= extern_hashes
 
                     if hashes:
