@@ -1,16 +1,18 @@
-try:
-    import pycl.log
-except ImportError:
-    pass
-else:
-    pycl.log.setup(debug_mode = True)
+"""Tests pyvsb's backup and restore process."""
 
+# TODO
+from pyvsb.main import setup_logging
+setup_logging(debug_mode = True)
+
+# TODO
+import hashlib
 import os
 import pprint
 import shutil
 import signal
 import socket
 import stat
+import tempfile
 import time
 
 import pytest
@@ -23,64 +25,75 @@ from psh import sh
 from pyvsb.backup import Restore
 from pyvsb.backuper import Backuper
 
-BACKUP_ROOT = os.path.join(os.getcwd(), "test_backup_root")
-"""Test backup root path."""
 
-_FAKE_ROOT_TEMPLATE = os.path.join(os.getcwd(), "root")
-
-FAKE_ROOT = os.path.join(os.getcwd(), "test_fake_root")
-
-RESTORE_PATH = "test_restore"
-
-
-def get_config():
-    return {
-        "backup_root": BACKUP_ROOT,
-        "max_backups": 1,
-        "max_backup_groups": 1,
-        "preserve_hard_links": True,
-        "trust_modify_time": False,
+def pytest_funcarg__env(request):
+    env = {
+        # TODO
+        "data_template_path": os.path.join(os.getcwd(), "root")
     }
 
-
-
-def pytest_funcarg__test(request):
-    if os.path.exists(FAKE_ROOT):
-        shutil.rmtree(FAKE_ROOT)
-
-    shutil.copytree(_FAKE_ROOT_TEMPLATE, FAKE_ROOT, symlinks = True)
-    #os.mkdir(FAKE_ROOT)
-
-
-    if os.path.exists(BACKUP_ROOT):
-        shutil.rmtree(BACKUP_ROOT)
-
-    os.mkdir(BACKUP_ROOT)
-
     def finalize():
-        try:
-            shutil.rmtree(BACKUP_ROOT)
-        finally:
-            try:
-                shutil.rmtree(FAKE_ROOT)
-            finally:
-                if os.path.exists(RESTORE_PATH):
-                    shutil.rmtree(RESTORE_PATH)
-
+        if "test_path" in env:
+            shutil.rmtree(env["test_path"])
     request.addfinalizer(finalize)
 
+    env["test_path"] = tempfile.mkdtemp()
+    env["data_path"] = os.path.join(env["test_path"], "data")
+    env["backup_path"] = os.path.join(env["test_path"], "backup")
+    env["restore_path"] = os.path.join(env["test_path"], "restore")
 
-def test_simple(test):
-    config = get_config()
-    config["backup_items"] = { FAKE_ROOT: {} }
+    if True:
+        shutil.copytree(env["data_template_path"],
+            env["data_path"], symlinks = True)
+    else:
+        os.mkdir(env["data_path"])
 
-    with Backuper(config) as backuper:
+    os.mkdir(env["backup_path"])
+
+    # TODO
+    env["config"] = {
+        "backup_root":         env["backup_path"],
+        "max_backups":         1,
+        "max_backup_groups":   1,
+        "preserve_hard_links": True,
+        "trust_modify_time":   False,
+        "backup_items":        { env["data_path"]: {} }
+    }
+
+    return env
+
+
+def test_simple(env):
+    with Backuper(env["config"]) as backuper:
         assert backuper.backup()
 
-    with Restore(_get_backup_path(), RESTORE_PATH) as restorer:
+    with Restore(_get_backups(env)[-1], env["restore_path"]) as restorer:
         assert restorer.restore()
 
-    assert _get_tree(FAKE_ROOT) == _get_tree(RESTORE_PATH + FAKE_ROOT)
+    assert _get_tree(env["data_path"]) == _get_tree(env["restore_path"] + env["data_path"])
+
+
+def test_double(env):
+    with Backuper(env["config"]) as backuper:
+        assert backuper.backup()
+
+    with Restore(_get_backups(env)[-1], env["restore_path"]) as restorer:
+        assert restorer.restore()
+
+    assert _get_tree(env["data_path"]) == _get_tree(env["restore_path"] + env["data_path"])
+
+    shutil.rmtree(env["restore_path"])
+
+
+    time.sleep(1)
+
+    with Backuper(env["config"]) as backuper:
+        assert backuper.backup()
+
+    with Restore(_get_backups(env)[-1], env["restore_path"]) as restorer:
+        assert restorer.restore()
+
+    assert _get_tree(env["data_path"]) == _get_tree(env["restore_path"] + env["data_path"])
 
 
 #def test_on_execute_with_exeption(unittest):
@@ -133,6 +146,7 @@ def test_simple(test):
 #        assert restorer.restore()
 
 
+# TODO
 def _get_tree(path, root = True, ignore = []):
     stat_info = os.lstat(path)
 
@@ -149,6 +163,18 @@ def _get_tree(path, root = True, ignore = []):
     elif stat.S_ISREG(stat_info.st_mode):
         tree["size"] = stat_info.st_size
         tree["mtime"] = int(stat_info.st_mtime)
+
+        with open(path, "rb") as hashing_file:
+            file_hash = hashlib.md5()
+
+            while True:
+                data = hashing_file.read(4096)
+                if not data:
+                    break
+
+                file_hash.update(data)
+
+            tree["md5"] = file_hash.hexdigest()
     elif stat.S_ISDIR(stat_info.st_mode):
         tree["files"] = {
             name: _get_tree(os.path.join(path, name), False)
@@ -173,9 +199,11 @@ def _get_tree(path, root = True, ignore = []):
 
 
 
-def _get_backup_path():
-    backup_path = BACKUP_ROOT
-    backup_path = os.path.join(backup_path, sorted(os.listdir(backup_path))[-1])
-    return os.path.join(backup_path, sorted(os.listdir(backup_path))[-1])
+# TODO
+def _get_backups(env):
+    backup_group_path = os.path.join(
+        env["backup_path"], sorted(os.listdir(env["backup_path"]))[-1])
 
-
+    return [
+        os.path.join(backup_group_path, backup_name)
+        for backup_name in sorted(os.listdir(backup_group_path)) ]
