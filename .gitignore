@@ -1,3 +1,5 @@
+/build
+/dist
 /pyvsb.egg-info
 /.vim
 *.pyc
