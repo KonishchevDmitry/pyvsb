@@ -48,7 +48,6 @@ _FILE_STATUS_UNIQUE = "unique"
 
 
 
-# TODO: lzma
 class Backup:
     """Controls backup creation."""
 
