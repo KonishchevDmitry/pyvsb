@@ -758,7 +758,7 @@ def _load_metadata(backup_path, handle_metadata):
                 if not line:
                     continue
 
-                handle_metadata(*line.decode(_ENCODING).split(" ", 4))
+                handle_metadata(*line.decode(_ENCODING).split(" ", 3))
 
         ok = True
     except Exception as e:
