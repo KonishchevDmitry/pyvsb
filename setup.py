@@ -46,7 +46,7 @@ if __name__ == "__main__":
             ],
             platforms = [ "unix", "linux", "osx" ],
 
-            install_requires = [ "psh" ],
+            install_requires = [ "psh" ], # TODO new version
             packages = find_packages(),
 
             cmdclass = { "test": PyTest },
