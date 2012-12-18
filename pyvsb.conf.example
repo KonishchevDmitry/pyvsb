@@ -1,0 +1,42 @@
+#!/usr/bin/env python
+
+"""PyVSB configuration file."""
+
+import os
+
+# Backup root
+BACKUP_ROOT = os.path.expanduser("~/backup")
+
+# Maximum number of backups per backup group
+MAX_BACKUPS = 7
+
+# Maximum number of backup groups
+MAX_BACKUP_GROUPS = 4
+
+# Trust file modify time when checking for file changes
+#TRUST_MODIFY_TIME = True
+
+# Preserve hard links information when writing backups
+#PRESERVE_HARD_LINKS = True
+
+# Backup items
+BACKUP_ITEMS = {
+    "/etc": {},
+
+    "/home/dmitry": {
+        "before": "tree -aN --dirsfirst /home/dmitry/temp > /home/dmitry/.directory_tree",
+        "after":  "rm -f /home/dmitry/.directory_tree",
+
+        "filter": [
+            r"-^Downloads$",
+            r"-^rpmbuild$",
+            r"-^temp$",
+            r"-^\.cache$",
+            r"-^\.dropbox",
+            r"-^\.[eE]ncrypted$",
+            r"-^\.mozilla$",
+            r"-^\.ssh/connection-",
+            r"-^\.thunderbird$",
+        ],
+    },
+}
