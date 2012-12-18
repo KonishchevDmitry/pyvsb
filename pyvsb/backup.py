@@ -48,6 +48,7 @@ _FILE_STATUS_UNIQUE = "unique"
 
 
 
+# TODO: lzma
 # TODO: don't add empty files to metadata
 class Backup:
     """Controls backup creation."""
