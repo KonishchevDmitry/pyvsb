@@ -1,4 +1,3 @@
-# TODO: check errors
 """pyvsb configuration file parser."""
 
 import copy
@@ -9,9 +8,6 @@ import re
 from .core import Error
 
 
-# TODO: HERE
-#os.path.realpath(
-# != "/"
 def get_config(path):
     """Parses the configuration file."""
 
@@ -23,19 +19,17 @@ def get_config(path):
     config = {}
 
     _get_param(config_obj, config, "backup_root", str, validate = _validate_path)
-    _get_param(config_obj, config, "backup_items", dict,
-        validate = _validate_backup_items)
+    _get_param(config_obj, config, "backup_items", dict, validate = _validate_backup_items)
 
     _get_param(config_obj, config, "max_backups", int, validate = _validate_positive_integer)
     _get_param(config_obj, config, "max_backup_groups", int, validate = _validate_positive_integer)
 
-    _get_param(config_obj, config, "trust_modify_time", bool, default = True) # TODO
-    _get_param(config_obj, config, "preserve_hard_links", bool, default = True) # TODO
+    _get_param(config_obj, config, "trust_modify_time", bool, default = True)
+    _get_param(config_obj, config, "preserve_hard_links", bool, default = True)
 
     return config
 
 
-# TODO: HERE
 def _get_param(config_obj, config, name, value_type, default = None, validate = lambda value: value):
     """Gets the specified parameter from config."""
 
@@ -58,7 +52,6 @@ def _get_param(config_obj, config, name, value_type, default = None, validate = 
         raise Error("Invalid {} value: {}", config_name, e)
 
 
-# TODO: HERE
 def _validate_backup_items(backup_items):
     """Validates backup items."""
 
