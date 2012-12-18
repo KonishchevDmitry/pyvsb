@@ -1,5 +1,4 @@
-# TODO
-"""pyvsb installation script."""
+"""PyVSB installation script."""
 
 from __future__ import unicode_literals
 
@@ -18,38 +17,42 @@ class PyTest(Test):
         pytest.main(self.test_args)
 
 
-description = """TODO"""
-
 if __name__ == "__main__":
-    setup(
-        name = "pyvsb",
-        version = "0.3",
+    with open("README") as readme:
+        setup(
+            name = "pyvsb",
+            version = "0.3",
 
-        description = "Very simple but powerful backup tool",
-        long_description = description,
-        url = "http://konishchevdmitry.github.com/psh/",
+            description = readme.readline().strip(),
+            long_description = readme.read().strip(),
+            url = "https://github.com/KonishchevDmitry/PyVSB",
 
-        license = "GPL3",
-        author = "Dmitry Konishchev",
-        author_email = "konishchev@gmail.com",
+            license = "GPL3",
+            author = "Dmitry Konishchev",
+            author_email = "konishchev@gmail.com",
 
-        classifiers = [
-            "Environment :: Console",
-            "Intended Audience :: End Users/Desktop",
-            "Intended Audience :: System Administrators",
-            "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
-            "Natural Language :: English",
-            "Operating System :: MacOS :: MacOS X",
-            "Operating System :: POSIX",
-            "Operating System :: Unix",
-            "Programming Language :: Python :: 3",
-            "Topic :: System :: Archiving :: Backup",
-            "Topic :: Utilities",
-        ],
-        platforms = [ "unix", "linux", "osx" ],
+            classifiers = [
+                "Environment :: Console",
+                "Intended Audience :: End Users/Desktop",
+                "Intended Audience :: System Administrators",
+                "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+                "Natural Language :: English",
+                "Operating System :: MacOS :: MacOS X", # TODO: test on OSX
+                "Operating System :: POSIX",
+                "Operating System :: Unix",
+                "Programming Language :: Python :: 3",
+                "Topic :: System :: Archiving :: Backup",
+                "Topic :: Utilities",
+            ],
+            platforms = [ "unix", "linux", "osx" ],
 
-        packages = find_packages(),
+            install_requires = [ "psh" ],
+            packages = find_packages(),
 
-        cmdclass = { "test": PyTest },
-        tests_require = [ "pytest" ],
-    )
+            cmdclass = { "test": PyTest },
+            tests_require = [ "pytest" ],
+
+            entry_points = {
+                "console_scripts": [ "pyvsb = pyvsb.main:main" ],
+            },
+        )
