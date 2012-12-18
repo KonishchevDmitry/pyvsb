@@ -49,7 +49,6 @@ _FILE_STATUS_UNIQUE = "unique"
 
 
 # TODO: lzma
-# TODO: don't add empty files to metadata
 class Backup:
     """Controls backup creation."""
 
@@ -150,7 +149,11 @@ class Backup:
             inode = ( stat_info.st_dev, stat_info.st_ino )
             link_target = self.__hardlink_inodes.get(inode)
 
-        has_data = ( file_obj is not None and link_target is None )
+        has_data = (
+            link_target is None and
+            file_obj is not None and
+            stat_info.st_size
+        )
 
         # Try to deduplicate backed up files
         if has_data:
