@@ -84,8 +84,8 @@ def main():
     except Exception as e:
         (LOG.exception if args.debug else LOG.error)(e)
         success = False
-    finally:
-        sys.exit(int(not success))
+
+    sys.exit(int(not success))
 
 
 def setup_logging(debug_mode = False, level = None, max_log_name_length = 14):
