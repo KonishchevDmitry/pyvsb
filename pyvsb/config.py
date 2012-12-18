@@ -30,7 +30,7 @@ def get_config(path):
     _get_param(config_obj, config, "max_backup_groups", int, validate = _validate_positive_integer)
 
     _get_param(config_obj, config, "trust_modify_time", bool, default = True) # TODO
-    _get_param(config_obj, config, "preserve_hard_links", bool, default = False) # TODO
+    _get_param(config_obj, config, "preserve_hard_links", bool, default = True) # TODO
 
     return config
 

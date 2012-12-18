@@ -1,0 +1,12 @@
+
+#
+# /etc/fstab
+# Created by anaconda on Fri Mar  2 19:42:27 2012
+#
+# Accessible filesystems, by reference, are maintained under '/dev/disk'
+# See man pages fstab(5), findfs(8), mount(8) and/or blkid(8) for more info
+#
+/dev/mapper/vg_work-lv_root /                       ext4  defaults  1 1
+UUID=7c292bbc-1346-4e38-a771-1986e0c435ea /boot     ext4  defaults  1 2
+/dev/mapper/vg_work-lv_home /home                   ext4  defaults  1 2
+/dev/mapper/vg_work-lv_swap swap                    swap  defaults  0 0
