@@ -51,12 +51,12 @@ _FILE_STATUS_UNIQUE = "unique"
 class Backup:
     """Controls backup creation."""
 
-    def __init__(self, config):
+    def __init__(self, config, storage):
         # Backup config
         self.__config = config
 
         # Backup storage abstraction
-        self.__storage = None
+        self.__storage = storage
 
         # Backup name
         self.__name = None
@@ -90,8 +90,6 @@ class Backup:
 
 
         try:
-            self.__storage = Storage(self.__config["backup_root"])
-
             self.__group, self.__name, path = self.__storage.create_backup(
                 self.__config["max_backups"])
 
@@ -284,6 +282,7 @@ class Backup:
             LOG.debug("Make '%s' an extern file with %s hash.", path, file_hash)
             return file_hash
         # Find files with the same hash <--
+
 
 
     def __load_all_backup_metadata(self, trust_modify_time):

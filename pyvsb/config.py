@@ -5,6 +5,8 @@ import imp
 import os
 import re
 
+from collections import Callable
+
 from .core import Error
 
 
@@ -26,6 +28,15 @@ def get_config(path):
 
     _get_param(config_obj, config, "trust_modify_time", bool, default = True)
     _get_param(config_obj, config, "preserve_hard_links", bool, default = True)
+
+    for handler_name in ( "on_group_created", "on_group_deleted", "on_backup_created" ):
+        if hasattr(config_obj, handler_name):
+            handler = getattr(config_obj, handler_name)
+
+            if not isinstance(handler, Callable):
+                raise Error("{} must be a callable object.", handler_name)
+
+            config[handler_name] = handler
 
     return config
 

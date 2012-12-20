@@ -13,6 +13,7 @@ system = psh.Program("sh", "-c", _defer = False)
 
 from .core import LogicalError
 from .backup import Backup
+from .storage import Storage
 
 LOG = logging.getLogger(__name__)
 
@@ -25,16 +26,47 @@ class Backuper:
     """Controls backup process."""
 
     def __init__(self, config):
+        def get_handler(name):
+            handler = config.get(name)
+
+            if handler is None:
+                def handler(*args):
+                    pass
+
+                return handler
+
+            logger = logging.getLogger("pyvsb.handler." + name)
+
+            def wrapper(*args):
+                LOG.info("Executing %s handler...", name)
+
+                try:
+                    handler(logger, *args)
+                except Exception:
+                    LOG.exception("%s handler crashed.", name)
+                    self.__ok = False
+
+            return wrapper
+
         # Config
         self.__config = config
+
+        # False if something went wrong during the backup
+        self.__ok = True
 
         # Default open() flags
         self.__open_flags = os.O_RDONLY | os.O_NOFOLLOW
         if hasattr(os, "O_NOATIME"):
             self.__open_flags |= os.O_NOATIME
 
+        # Backup storage abstraction
+        storage = Storage(config["backup_root"],
+            on_group_created = get_handler("on_group_created"),
+            on_group_deleted = get_handler("on_group_deleted"),
+            on_backup_created = get_handler("on_backup_created"))
+
         # Holds backup writing logic
-        self.__backup = Backup(config)
+        self.__backup = Backup(config, storage)
 
 
     def __enter__(self):
@@ -49,21 +81,19 @@ class Backuper:
     def backup(self):
         """Starts the backup."""
 
-        ok = True
-
         try:
             for path, params in self.__config["backup_items"].items():
                 if self.__run_script(params.get("before")):
-                    ok &= self.__backup_path(path, params.get("filter", []), path)
-                    ok &= self.__run_script(params.get("after"))
+                    self.__ok &= self.__backup_path(path, params.get("filter", []), path)
+                    self.__ok &= self.__run_script(params.get("after"))
                 else:
-                    ok = False
+                    self.__ok = False
 
             self.__backup.commit()
         finally:
             self.__backup.close()
 
-        return ok
+        return self.__ok
 
 
     def close(self):
@@ -76,7 +106,6 @@ class Backuper:
         """Backups the specified path."""
 
         ok = True
-
         LOG.info("Backing up '%s'...", path)
 
         try:

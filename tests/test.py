@@ -97,6 +97,50 @@ def test_double(env, max_backups):
     assert _hash_tree(env["restore_path"] + env["data_path"]) == source_tree
 
 
+@pytest.mark.parametrize("with_raise", ( False, True ))
+def test_on_backup_created_handler(env, with_raise):
+    log = []
+    groups = []
+
+    def on_group_created(logger, group):
+        assert group == _get_groups(env)[-1]
+        log.append("group_created")
+        groups.append(group)
+
+    def on_group_deleted(logger, group):
+        assert group == groups.pop(0)
+        log.append("group_deleted")
+
+    def on_backup_created(logger, group, name, path):
+        assert group == groups[-1]
+        assert name == os.path.basename(path)
+        assert path == _get_backups(env, group = group)[-1]
+        log.append("backup_created")
+
+        if with_raise:
+            raise Exception("Test exception")
+
+    env["config"]["max_backups"] = 1
+    env["config"]["max_backup_groups"] = 1
+
+    env["config"]["on_group_created"] = on_group_created
+    env["config"]["on_group_deleted"] = on_group_deleted
+    env["config"]["on_backup_created"] = on_backup_created
+
+
+    with Backuper(env["config"]) as backuper:
+        assert backuper.backup() == ( not with_raise )
+        assert log == [ "group_created", "backup_created" ]
+
+
+    time.sleep(1)
+    del log[:]
+
+    with Backuper(env["config"]) as backuper:
+        assert backuper.backup() == ( not with_raise )
+        assert log == [ "group_created", "backup_created", "group_deleted" ]
+
+
 @pytest.mark.parametrize(( "max_groups", "max_backups" ), (
     ( 1, 1 ), ( 2, 1 ), ( 2, 3 ),
 ))

@@ -32,9 +32,24 @@ _BACKUP_NAME_RE = re.compile(r"^\d{4}\.\d{2}\.\d{2}-\d{2}:\d{2}:\d{2}$")
 class Storage:
     """Backup data storage abstraction."""
 
-    def __init__(self, backup_root):
+    def __init__(
+        self, backup_root, on_group_created = None,
+        on_group_deleted = None, on_backup_created = None
+    ):
         # Backup root directory
         self.__backup_root = backup_root
+
+
+        # Event handlers
+
+        if on_group_created is not None:
+            self.__on_group_created = on_group_created
+
+        if on_group_deleted is not None:
+            self.__on_group_deleted = on_group_deleted
+
+        if on_backup_created is not None:
+            self.__on_backup_created = on_backup_created
 
 
     def backup_path(self, group, name, temp = False):
@@ -83,6 +98,8 @@ class Storage:
         except Exception as e:
             raise Error("Unable to rename backup data directory '{}' to '{}': {}.",
                 cur_path, new_path, psys.e(e))
+
+        self.__on_backup_created(group, name, new_path)
 
 
     @staticmethod
@@ -153,9 +170,13 @@ class Storage:
 
             for group in groups[max_backup_groups:]:
                 LOG.info("Removing backup group '%s'...", group)
+
                 shutil.rmtree(self.group_path(group),
                     onerror = lambda func, path, excinfo:
                         LOG.error("Failed to remove '%s': %s.", path, psys.e(excinfo[1])))
+
+                if not os.path.exists(self.group_path(group)):
+                    self.__on_group_deleted(group)
         except Exception as e:
             LOG.error("Failed to rotate backup groups: %s", e)
 
@@ -175,6 +196,8 @@ class Storage:
                 raise Error("Unable to create a new backup group '{}': {}.",
                     group_path, psys.e(e))
 
+        self.__on_group_created(group)
+
         return group
 
 
@@ -189,3 +212,15 @@ class Storage:
         except EnvironmentError as e:
             raise Error("Error while reading backup root directory '{}': {}.",
                 self.__backup_root, psys.e(e))
+
+
+    def __on_backup_created(self, logger, *args):
+        """An empty backup creation handler."""
+
+
+    def __on_group_created(self, logger, *args):
+        """An empty group creation handler."""
+
+
+    def __on_group_deleted(self, logger, *args):
+        """An empty group deletion handler."""
