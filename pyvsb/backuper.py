@@ -147,7 +147,7 @@ class Backuper:
                     self.__open_flags & os.O_NOATIME
                 ):
                     # Just disable this flag on a first EPERM error
-                    LOG.error("Got EPERM error. Disabling O_NOATIME for file opening operations...")
+                    LOG.debug("Got EPERM error. Disabling O_NOATIME for file opening operations...")
                     self.__open_flags &= ~os.O_NOATIME
                     fd = eintr_retry(os.open)(path, self.__open_flags)
                 else:
