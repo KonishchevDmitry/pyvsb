@@ -414,7 +414,7 @@ class Restore:
             self.__state = _STATE_CLOSED
 
 
-    def restore(self):
+    def restore(self, paths_to_restore = None):
         """Restores the backup.
 
         Returns True if all files has been successfully restored.
@@ -449,6 +449,14 @@ class Restore:
 
         for tar_info in files:
             path = "/" + tar_info.name
+
+            if paths_to_restore is not None:
+                for path_to_restore in paths_to_restore:
+                    if path == path_to_restore or path.startswith(path_to_restore + os.path.sep):
+                        break
+                else:
+                    continue
+
             restore_path = os.path.join(self.__restore_path, tar_info.name)
 
             LOG.info("Restoring '%s'...", path)

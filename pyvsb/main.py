@@ -50,6 +50,9 @@ def main():
     parser.add_argument("-r", "--restore", metavar = "BACKUP_PATH",
         default = None, help = "restore the specified backup")
 
+    parser.add_argument("paths_to_restore", nargs = "*",
+        metavar = "PATH_TO_RESTORE", help = "Path to restore (default is /)")
+
     parser.add_argument("-d", "--debug", action = "store_true",
         help = "turn on debug messages")
 
@@ -57,6 +60,10 @@ def main():
         help = "show only warning and error messages (intended to be used from cron)")
 
     args = parser.parse_args()
+
+    if args.restore is None and args.paths_to_restore:
+        parser.print_help()
+        sys.exit(os.EX_USAGE)
 
 
     log_level = logging.WARNING if args.cron else logging.INFO
@@ -77,8 +84,10 @@ def main():
                 raise Error("Backup failed: {}", e)
         else:
             try:
+                paths_to_restore = [ os.path.abspath(path) for path in args.paths_to_restore ]
+
                 with Restore(os.path.abspath(args.restore)) as restorer:
-                    success = restorer.restore()
+                    success = restorer.restore(paths_to_restore or None)
             except Exception as e:
                 raise Error("Restore failed: {}", e)
     except Exception as e:
