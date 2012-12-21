@@ -114,6 +114,12 @@ class Storage:
         if group_path == "/":
             raise Error("Invalid backup group directory: {}.", group_path)
 
+        if _BACKUP_NAME_RE.search(backup_name) is None:
+            raise Error("'{}' doesn't look like a backup directory.", backup_path)
+
+        if _GROUP_NAME_RE.search(group_name) is None:
+            raise Error("'{}' doesn't look like a backup group directory.", group_path)
+
         return backup_name, group_name, Storage(backup_root)
 
 
