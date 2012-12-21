@@ -37,7 +37,7 @@ if __name__ == "__main__":
                 "Intended Audience :: System Administrators",
                 "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
                 "Natural Language :: English",
-                "Operating System :: MacOS :: MacOS X", # TODO: test on OSX
+                "Operating System :: MacOS :: MacOS X",
                 "Operating System :: POSIX",
                 "Operating System :: Unix",
                 "Programming Language :: Python :: 3",
@@ -46,11 +46,11 @@ if __name__ == "__main__":
             ],
             platforms = [ "unix", "linux", "osx" ],
 
-            install_requires = [ "psh" ], # TODO new version
+            install_requires = [ "psys", "psh" ],
             packages = find_packages(),
 
             cmdclass = { "test": PyTest },
-            tests_require = [ "pytest" ],
+            tests_require = [ "psys", "pytest" ],
 
             entry_points = {
                 "console_scripts": [ "pyvsb = pyvsb.main:main" ],
