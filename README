@@ -6,4 +6,4 @@ important because you always can easily restore particular files even if you
 don't have PyVSB or it doesn't work in your environment for some reason.
 
 PyVSB works only under Python 3. For Python 2 use PyVSB 0.2 which could be
-cloned here - https://github.com/KonishchevDmitry/PyVSB/tree/0.2
+cloned here - https://github.com/KonishchevDmitry/pyvsb/tree/0.2
