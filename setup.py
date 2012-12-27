@@ -25,7 +25,7 @@ if __name__ == "__main__":
 
             description = readme.readline().strip(),
             long_description = readme.read().strip(),
-            url = "https://github.com/KonishchevDmitry/PyVSB",
+            url = "https://github.com/KonishchevDmitry/pyvsb",
 
             license = "GPL3",
             author = "Dmitry Konishchev",
