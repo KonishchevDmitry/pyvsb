@@ -47,6 +47,7 @@ def pytest_funcarg__env(request):
         "max_backup_groups":   1000,
         "preserve_hard_links": True,
         "trust_modify_time":   True,
+        "compression":         "none",
         "backup_items":        { env["data_path"]: {} }
     }
 
@@ -312,6 +313,42 @@ def test_complex(env, config):
                 assert script_test.read() == "SCRIPT_TEST\n"
 
         assert source_tree == restore_tree
+        shutil.rmtree(env["restore_path"])
+
+
+def test_compression(env):
+    source_trees = []
+    formats = ( "bz2", "gz", "none" )
+
+    env["config"]["max_backups"] = len(formats)
+
+    for id, format in enumerate(formats):
+        if(id): time.sleep(1)
+
+        with open(os.path.join(env["data_path"], "format"), "w") as changing_file:
+            changing_file.write(format)
+
+        source_tree = _hash_tree(env["data_path"])
+        source_trees.append(source_tree)
+
+        env["config"]["compression"] = format
+
+        with Backuper(env["config"]) as backuper:
+            assert backuper.backup()
+
+        assert len(_get_groups(env)) == 1
+        assert os.path.exists(os.path.join(_get_backups(env)[-1],
+            "data.tar" + ( "" if format == "none" else "." + format )))
+
+    backups = _get_backups(env)
+    assert len(backups) == len(formats)
+
+    for backup, source_tree in zip(backups, source_trees):
+        with Restore(backup, env["restore_path"]) as restorer:
+            assert restorer.restore()
+
+        assert source_tree == _hash_tree(env["restore_path"] + env["data_path"])
+
         shutil.rmtree(env["restore_path"])
 
 

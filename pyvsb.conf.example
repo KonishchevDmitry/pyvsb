@@ -19,6 +19,9 @@ MAX_BACKUP_GROUPS = 4
 # Preserve hard links information when writing backups
 #PRESERVE_HARD_LINKS = True
 
+# Backup data compression format: "bz2", "gz", "none"
+#COMPRESSION = "bz2"
+
 # Backup items
 BACKUP_ITEMS = {
     "/etc": {},

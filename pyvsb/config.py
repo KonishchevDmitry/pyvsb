@@ -28,6 +28,7 @@ def get_config(path):
 
     _get_param(config_obj, config, "trust_modify_time", bool, default = True)
     _get_param(config_obj, config, "preserve_hard_links", bool, default = True)
+    _get_param(config_obj, config, "compression", str, validate = _validate_compression, default = "bz2")
 
     for handler_name in ( "on_group_created", "on_group_deleted", "on_backup_created" ):
         if hasattr(config_obj, handler_name):
@@ -61,6 +62,18 @@ def _get_param(config_obj, config, name, value_type, default = None, validate = 
         config[name] = validate(value)
     except Exception as e:
         raise Error("Invalid {} value: {}", config_name, e)
+
+
+def _validate_compression(compression):
+    """Validates compression."""
+
+    formats = ( "bz2", "gz", "none" )
+
+    if compression not in formats:
+        raise Error("Invalid compression format: '{}'. Available formats: {}.",
+            compression, ", ".join(formats))
+
+    return compression
 
 
 def _validate_backup_items(backup_items):

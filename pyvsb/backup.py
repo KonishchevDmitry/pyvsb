@@ -8,8 +8,6 @@ import os
 import stat
 import tarfile
 
-from hashlib import sha1
-
 import psys
 
 from . import utils
@@ -29,7 +27,7 @@ _STATE_CLOSED = "closed"
 """Closed object state."""
 
 
-_DATA_FILE_NAME = "data.tar.bz2"
+_DATA_FILE_NAME = "data.tar"
 """Name of backup data file."""
 
 _METADATA_FILE_NAME = "metadata.bz2"
@@ -98,13 +96,12 @@ class Backup:
 
             LOG.debug("Creating backup %s in group %s...", self.__name, self.__group)
 
-            data_path = os.path.join(path, _DATA_FILE_NAME)
-
             try:
-                self.__data = tarfile.open(data_path, "w:bz2")
+                self.__data = utils.CompressedTarFile(
+                    os.path.join(path, _DATA_FILE_NAME),
+                    write = self.__config["compression"])
             except Exception as e:
-                raise Error("Unable to create a backup data tar archive '{}': {}.",
-                    data_path, psys.e(e))
+                raise Error("Unable to create a backup data tar archive in '{}': {}.", path, psys.e(e))
 
             metadata_path = os.path.join(path, _METADATA_FILE_NAME)
 
@@ -154,7 +151,7 @@ class Backup:
 
         # Try to deduplicate backed up files
         if has_data:
-            file_obj = _HashableFile(file_obj)
+            file_obj = utils.HashableFile(file_obj)
 
             fingerprint = _get_file_fingerprint(stat_info)
             file_hash = self.__deduplicate(path, stat_info, fingerprint, file_obj)
@@ -362,13 +359,12 @@ class Restore:
             if self.__restore_path is None:
                 self.__restore_path = self.__name
 
-            data_path = os.path.join(backup_path, _DATA_FILE_NAME)
-
             try:
-                self.__data = tarfile.open(data_path, "r:bz2")
+                self.__data = utils.CompressedTarFile(
+                    os.path.join(backup_path, _DATA_FILE_NAME))
             except Exception as e:
-                raise Error("Unable to open backup data '{}': {}.",
-                    data_path, psys.e(e))
+                raise Error("Unable to open data of '{}' backup: {}.",
+                    backup_path, psys.e(e))
 
             self.__init_metadata_cache()
         except:
@@ -542,26 +538,25 @@ class Restore:
 
         files = {}
         data = None
+        backup_path = self.__storage.backup_path(self.__group, name)
 
-        data_path = os.path.join(
-            self.__storage.backup_path(self.__group, name), _DATA_FILE_NAME)
-
-        LOG.debug("Loading backup data '%s'...", data_path)
+        LOG.debug("Loading data of '%s' backup...", backup_path)
 
         try:
             if name == self.__name:
                 data = self.__data
             else:
-                data = tarfile.open(data_path, "r:bz2")
+                data = utils.CompressedTarFile(os.path.join(
+                    backup_path, _DATA_FILE_NAME))
 
             for tar_info in data:
                 hash = paths.get("/" + tar_info.name)
                 if hash is not None and hash in hashes:
                     files[hash] = tar_info
         except Exception as e:
-            LOG.error("Failed to load backup data '%s': %s.", data_path, psys.e(e))
+            LOG.error("Failed to load data of '%s' backup: %s.", backup_path, psys.e(e))
         else:
-            LOG.debug("Backup data '%s' has been successfully loaded.", data_path)
+            LOG.debug("Data of '%s' backup has been successfully loaded.", backup_path)
 
         if files:
             return {
@@ -574,7 +569,7 @@ class Restore:
                 try:
                     data.close()
                 except Exception as e:
-                    LOG.error("Failed to close backup data file '%s': %s.", data_path, e)
+                    LOG.error("Failed to close data file of '%s' backup: %s.", backup_path, e)
 
             return None
 
@@ -655,36 +650,6 @@ class Restore:
                 break
         else:
             raise Error("Unable to find the file: backup is corrupted.")
-
-
-
-class _HashableFile():
-    """A wrapper for a file object that hashes all read data."""
-
-    def __init__(self, file):
-        self.__file = file
-        self.__hash = sha1()
-
-
-    def hexdigest(self):
-        """Returns read data hash."""
-
-        return self.__hash.hexdigest()
-
-
-    def read(self, *args, **kwargs):
-        """Reads data from the file and hashes the returning value."""
-
-        data = self.__file.read(*args, **kwargs)
-        self.__hash.update(data)
-        return data
-
-
-    def reset(self):
-        """Resets the file position."""
-
-        self.__file.seek(0)
-        self.__hash = sha1()
 
 
 
