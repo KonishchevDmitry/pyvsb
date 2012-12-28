@@ -1,0 +1,5 @@
+graft tests
+include INSTALL
+include Makefile
+include pyvsb.conf.example
+include README
