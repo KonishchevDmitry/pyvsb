@@ -40,26 +40,47 @@ class OutputHandler(logging.Handler):
 def main():
     """The script's main function."""
 
-    parser = argparse.ArgumentParser(
-        description = "pyvsb - A very simple in configuring but powerful backup tool")
+    parser = argparse.ArgumentParser(add_help = False,
+        description = "A very simple in configuring but powerful backup tool")
 
-    parser.add_argument("-c", "--config", metavar = "CONFIG_PATH", type = str,
+
+    group = parser.add_argument_group("Backup")
+
+    group.add_argument("-c", "--config", metavar = "CONFIG_PATH", type = str,
         default = os.path.expanduser("~/.pyvsb.conf"),
         help = "configuration file path (default is ~/.pyvsb.conf)")
 
-    parser.add_argument("-r", "--restore", metavar = "BACKUP_PATH",
+
+    group = parser.add_argument_group("Restore")
+
+    group.add_argument("-r", "--restore", metavar = "BACKUP_PATH",
         default = None, help = "restore the specified backup")
 
-    parser.add_argument("paths_to_restore", nargs = "*",
+    group.add_argument("-i", "--in-place", action = "store_true",
+        help = "don't use extra disc space by decompressing backup files "
+        "(this option significantly slows down restore process)")
+
+    group.add_argument("paths_to_restore", nargs = "*",
         metavar = "PATH_TO_RESTORE", help = "Path to restore (default is /)")
 
-    parser.add_argument("-d", "--debug", action = "store_true",
-        help = "turn on debug messages")
 
-    parser.add_argument("--cron", action = "store_true",
+    group = parser.add_argument_group("Optional arguments")
+
+    group.add_argument("--cron", action = "store_true",
         help = "show only warning and error messages (intended to be used from cron)")
 
+    group.add_argument("-d", "--debug", action = "store_true",
+        help = "turn on debug messages")
+
+    group.add_argument("-h", "--help", action = "store_true",
+        help = "show this help message and exit")
+
+
     args = parser.parse_args()
+
+    if args.help:
+        parser.print_help()
+        sys.exit(os.EX_OK)
 
     if args.restore is None and args.paths_to_restore:
         parser.print_help()
@@ -86,7 +107,7 @@ def main():
             try:
                 paths_to_restore = [ os.path.abspath(path) for path in args.paths_to_restore ]
 
-                with Restore(os.path.abspath(args.restore)) as restorer:
+                with Restore(os.path.abspath(args.restore), in_place = args.in_place) as restorer:
                     success = restorer.restore(paths_to_restore or None)
             except Exception as e:
                 raise Error("Restore failed: {}", e)

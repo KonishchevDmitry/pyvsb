@@ -322,7 +322,7 @@ class Backup:
 class Restore:
     """Controls backup restoring."""
 
-    def __init__(self, backup_path, restore_path = None):
+    def __init__(self, backup_path, restore_path = None, in_place = False):
         # Backup name
         self.__name = None
 
@@ -334,6 +334,9 @@ class Restore:
 
         # Restore path
         self.__restore_path = restore_path
+
+        # Don't use extra disc space by decompressing backup files
+        self.__in_place = in_place
 
         # Current object state
         self.__state = _STATE_OPENED
@@ -361,7 +364,8 @@ class Restore:
 
             try:
                 self.__data = utils.CompressedTarFile(
-                    os.path.join(backup_path, _DATA_FILE_NAME))
+                    os.path.join(backup_path, _DATA_FILE_NAME),
+                    decompress = not self.__in_place)
             except Exception as e:
                 raise Error("Unable to open data of '{}' backup: {}.",
                     backup_path, psys.e(e))
@@ -546,8 +550,9 @@ class Restore:
             if name == self.__name:
                 data = self.__data
             else:
-                data = utils.CompressedTarFile(os.path.join(
-                    backup_path, _DATA_FILE_NAME))
+                data = utils.CompressedTarFile(
+                    os.path.join(backup_path, _DATA_FILE_NAME),
+                    decompress = not self.__in_place)
 
             for tar_info in data:
                 hash = paths.get("/" + tar_info.name)

@@ -316,7 +316,8 @@ def test_complex(env, config):
         shutil.rmtree(env["restore_path"])
 
 
-def test_compression(env):
+@pytest.mark.parametrize("in_place", ( True, False ))
+def test_compression(env, in_place):
     source_trees = []
     formats = ( "bz2", "gz", "none" )
 
@@ -344,7 +345,7 @@ def test_compression(env):
     assert len(backups) == len(formats)
 
     for backup, source_tree in zip(backups, source_trees):
-        with Restore(backup, env["restore_path"]) as restorer:
+        with Restore(backup, env["restore_path"], in_place = in_place) as restorer:
             assert restorer.restore()
 
         assert source_tree == _hash_tree(env["restore_path"] + env["data_path"])
