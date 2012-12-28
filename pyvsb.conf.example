@@ -2,6 +2,7 @@
 
 """PyVSB configuration file."""
 
+
 import os
 
 # Backup root
@@ -43,3 +44,16 @@ BACKUP_ITEMS = {
         ],
     },
 }
+
+
+# You can do arbitrary actions in these handlers to control your backup
+# creation. For example, upload created backups to cloud.
+
+def on_backup_created(log, group, name, path):
+    """Called when a backup is created."""
+
+def on_group_created(log, name):
+    """Called when a backup group is created."""
+
+def on_group_deleted(log, name):
+    """Called when a backup group is deleted."""
