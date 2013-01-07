@@ -74,7 +74,8 @@ class CompressedTarFile:
                 file_format = self.__formats[write]
 
                 self.__file = tarfile.open(
-                    path + file_format["extension"], "w" + file_format["mode"])
+                    path + file_format["extension"], "w" + file_format["mode"],
+                    format = tarfile.PAX_FORMAT)
         except:
             self.close()
             raise

@@ -121,6 +121,10 @@ class Backup:
         if self.__state != _STATE_OPENED:
             raise Error("The backup file is closed")
 
+        # Limitation of tar format
+        if "\0" in path:
+            raise Error(r"File names with '\0' aren't supported")
+
         # Limitation due to using text files for metadata
         if "\r" in path or "\n" in path:
             raise Error(r"File names with '\r' or '\n' aren't supported")
