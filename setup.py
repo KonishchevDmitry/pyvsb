@@ -9,7 +9,10 @@ from setuptools.command.test import test as Test
 class PyTest(Test):
     def finalize_options(self):
         Test.finalize_options(self)
-        self.test_args = [ "tests/test.py" ]
+        self.test_args = [
+            "tests/test.py",
+            #"--capture=no",
+        ]
         self.test_suite = True
 
     def run_tests(self):

@@ -67,6 +67,20 @@ def test_simple(env):
     assert _hash_tree(env["restore_path"] + env["data_path"]) == source_tree
 
 
+def test_topdirs_permissions(env):
+    source_tree = _hash_tree(env["data_path"], prefix = "/")
+
+    with Backuper(env["config"]) as backuper:
+        assert backuper.backup()
+
+    with Restore(_get_backups(env)[-1], env["restore_path"]) as restorer:
+        assert restorer.restore()
+
+    assert _hash_tree(env["data_path"], prefix = "/") == source_tree
+    assert _hash_tree(env["restore_path"] + env["data_path"],
+        prefix = env["restore_path"]) == source_tree
+
+
 @pytest.mark.parametrize("max_backups", ( 1, 10 ))
 def test_double(env, max_backups):
     source_tree = _hash_tree(env["data_path"])
@@ -193,11 +207,12 @@ def test_complex(env, config):
         changing_file.write("first revision")
 
     source_tree = _hash_tree(env["data_path"])
-    source_tree["files"] = { name: tree
-        for name, tree in source_tree["files"].items()
+    source_tree["data"]["files"] = {
+        name: tree
+        for name, tree in source_tree["data"]["files"].items()
             if name in ( "etc", "home" )
     }
-    del source_tree["files"]["home"]["mtime"]
+    del source_tree["data"]["files"]["home"]["mtime"]
 
     with Backuper(env["config"]) as backuper:
         assert backuper.backup()
@@ -216,8 +231,9 @@ def test_complex(env, config):
         changing_file.write("second revision")
 
     source_tree = _hash_tree(env["data_path"])
-    source_tree["files"] = { name: tree
-        for name, tree in source_tree["files"].items()
+    source_tree["data"]["files"] = {
+        name: tree
+        for name, tree in source_tree["data"]["files"].items()
             if name == "etc"
     }
 
@@ -240,11 +256,12 @@ def test_complex(env, config):
         changing_file.write("third revision")
 
     source_tree = _hash_tree(env["data_path"])
-    source_tree["files"] = { name: tree
-        for name, tree in source_tree["files"].items()
+    source_tree["data"]["files"] = {
+        name: tree
+        for name, tree in source_tree["data"]["files"].items()
             if name in ( "etc", "tmp" )
     }
-    del source_tree["files"]["etc"]["files"]["bash_completion.d"]
+    del source_tree["data"]["files"]["etc"]["files"]["bash_completion.d"]
 
     with Backuper(env["config"]) as backuper:
         assert backuper.backup()
@@ -277,14 +294,15 @@ def test_complex(env, config):
     unix_socket.bind(os.path.join(tmp_path, "socket"))
 
     source_tree = _hash_tree(env["data_path"])
-    source_tree["files"] = { name: tree
-        for name, tree in source_tree["files"].items()
+    source_tree["data"]["files"] = {
+        name: tree
+        for name, tree in source_tree["data"]["files"].items()
             if name in ( "etc", "home", "tmp" )
     }
-    del source_tree["files"]["tmp"]["files"]["socket"]
+    del source_tree["data"]["files"]["tmp"]["files"]["socket"]
     if not env["config"]["preserve_hard_links"]:
-        source_tree["files"]["tmp"]["files"]["hardlink"]["links"] = 1
-        source_tree["files"]["tmp"]["files"]["hardlink-target"]["links"] = 1
+        source_tree["data"]["files"]["tmp"]["files"]["hardlink"]["links"] = 1
+        source_tree["data"]["files"]["tmp"]["files"]["hardlink-target"]["links"] = 1
 
     env["config"]["backup_items"] = {
         env["data_path"] + "/etc": {},
@@ -306,8 +324,8 @@ def test_complex(env, config):
         restore_tree = _hash_tree(env["restore_path"] + env["data_path"])
 
         if backup_id == 0:
-            del restore_tree["files"]["home"]["mtime"]
-            del restore_tree["files"]["home"]["files"]["script_test"]
+            del restore_tree["data"]["files"]["home"]["mtime"]
+            del restore_tree["data"]["files"]["home"]["files"]["script_test"]
 
             with open(env["restore_path"] + env["data_path"] + "/home/script_test") as script_test:
                 assert script_test.read() == "SCRIPT_TEST\n"
@@ -370,17 +388,51 @@ def _get_groups(env):
     return sorted(os.listdir(env["backup_path"]))
 
 
-def _hash_tree(path, root = True):
+def _hash_tree(path, prefix = None, root = True):
     """Hashes a directory tree to compare directories for equality."""
+
+# TODO
+    if root:
+        time.sleep(2)
+    if root == True:
+        topdirs = []
+        directory = path
+
+        while prefix is not None:
+            directory = os.path.dirname(directory)
+            if directory == prefix:
+                break
+
+            stat_info = os.lstat(directory)
+
+            tree = {
+                "name":  os.path.basename(directory),
+                "mode":  stat_info.st_mode,
+                "files": {},
+            }
+
+            if os.geteuid() == 0:
+                tree.update({
+                    "uid":  stat_info.st_uid,
+                    "gid":  stat_info.st_gid,
+                })
+
+            topdirs.append(tree)
+
+        topdirs.append({ "files": {} })
 
     stat_info = os.lstat(path)
 
     tree = {
         "name": os.path.basename(path),
-        "uid":  stat_info.st_uid,
-        "gid":  stat_info.st_gid,
         "mode": stat_info.st_mode,
     }
+
+    if os.geteuid() == 0:
+        tree.update({
+            "uid":  stat_info.st_uid,
+            "gid":  stat_info.st_gid,
+        })
 
     if not stat.S_ISLNK(stat_info.st_mode):
         tree["mtime"] = int(stat_info.st_mtime)
@@ -407,4 +459,17 @@ def _hash_tree(path, root = True):
     elif stat.S_ISLNK(stat_info.st_mode):
         tree["target"] = os.readlink(path)
 
-    return { "files": tree["files"] } if root else tree
+    if root:
+        prev_tree = None
+
+        for cur_tree in topdirs:
+            if prev_tree is None:
+                cur_tree["files"][tree["name"]] = tree
+            else:
+                cur_tree["files"][prev_tree["name"]] = prev_tree
+
+            prev_tree = cur_tree
+
+        return cur_tree["files"]
+    else:
+        return tree

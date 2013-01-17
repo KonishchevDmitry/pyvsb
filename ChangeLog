@@ -1,6 +1,8 @@
 -----------
  * Using pax tar archive format for storing backup data to support Unicode
    and long file names.
+ * Fixed a bug due to which no permissions has been stored for backup items'
+   top level directories.
 
 
 Version 0.3

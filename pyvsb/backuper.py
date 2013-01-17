@@ -11,7 +11,7 @@ from psys import eintr_retry
 import psh
 system = psh.Program("sh", "-c", _defer = False)
 
-from .core import LogicalError
+from .core import Error, LogicalError
 from .backup import Backup
 from .storage import Storage
 
@@ -68,6 +68,10 @@ class Backuper:
         # Holds backup writing logic
         self.__backup = Backup(config, storage)
 
+        # A list of backup items' top level directories that has been added to
+        # the backup
+        self.__toplevel_dirs = set()
+
 
     def __enter__(self):
         return self
@@ -84,7 +88,14 @@ class Backuper:
         try:
             for path, params in self.__config["backup_items"].items():
                 if self.__run_script(params.get("before")):
-                    self.__ok &= self.__backup_path(path, params.get("filter", []), path)
+                    try:
+                        self.__add_toplevel_dirs(path)
+                    except Exception as e:
+                        LOG.error("Failed to backup '%s': %s.", path, psys.e(e))
+                        self.__ok = False
+                    else:
+                        self.__ok &= self.__backup_path(path, params.get("filter", []), path)
+
                     self.__ok &= self.__run_script(params.get("after"))
                 else:
                     self.__ok = False
@@ -100,6 +111,27 @@ class Backuper:
         """Closes the object."""
 
         self.__backup.close()
+
+
+    def __add_toplevel_dirs(self, path):
+        """
+        Adds all top level directories of the specified path to the backup.
+        """
+
+        toplevel_dir = "/"
+
+        for directory in path.split(os.path.sep)[1:-1]:
+            toplevel_dir = os.path.join(toplevel_dir, directory)
+            if toplevel_dir in self.__toplevel_dirs:
+                continue
+
+            stat_info = os.lstat(toplevel_dir)
+
+            if not stat.S_ISDIR(stat_info.st_mode):
+                raise Error("'{}' is not a directory", toplevel_dir)
+
+            self.__toplevel_dirs.add(toplevel_dir)
+            self.__backup.add_file(toplevel_dir, stat_info)
 
 
     def __backup_path(self, path, filters, toplevel):
