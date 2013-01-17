@@ -1,6 +1,6 @@
 -----------
  * Using pax tar archive format for storing backup data to support Unicode
-   file names.
+   and long file names.
 
 
 Version 0.3
