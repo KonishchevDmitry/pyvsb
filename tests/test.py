@@ -391,9 +391,6 @@ def _get_groups(env):
 def _hash_tree(path, prefix = None, root = True):
     """Hashes a directory tree to compare directories for equality."""
 
-# TODO
-    if root:
-        time.sleep(2)
     if root == True:
         topdirs = []
         directory = path
