@@ -10,7 +10,7 @@ import shutil
 import tarfile
 import tempfile
 
-from hashlib import sha1
+from hashlib import sha256
 
 import psys
 
@@ -134,7 +134,7 @@ class HashableFile():
 
     def __init__(self, file):
         self.__file = file
-        self.__hash = sha1()
+        self.__hash = sha256()
 
 
     def hexdigest(self):
@@ -155,7 +155,7 @@ class HashableFile():
         """Resets the file position."""
 
         self.__file.seek(0)
-        self.__hash = sha1()
+        self.__hash = sha256()
 
 
 
