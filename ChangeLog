@@ -1,3 +1,8 @@
+Version 0.4
+-------------
+ * Use SHA256 instead of SHA1
+
+
 Version 0.3.1
 -------------
  * Using pax tar archive format for storing backup data to support Unicode
