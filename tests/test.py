@@ -24,7 +24,8 @@ pyvsb.storage._GROUP_NAME_FORMAT = pyvsb.storage._BACKUP_NAME_FORMAT
 pyvsb.storage._GROUP_NAME_RE = pyvsb.storage._BACKUP_NAME_RE
 
 
-def pytest_funcarg__env(request):
+@pytest.fixture
+def env(request):
     env = {}
     data_template_path = os.path.join(os.getcwd(), "tests/root")
 
