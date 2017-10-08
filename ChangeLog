@@ -1,3 +1,9 @@
+Version 0.4.1
+-------------
+ * Fix an exception handling error which led to less graceful error handling
+   when archive fails to decompress.
+
+
 Version 0.4
 -------------
  * Use SHA256 instead of SHA1

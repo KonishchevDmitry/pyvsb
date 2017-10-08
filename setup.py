@@ -24,7 +24,7 @@ if __name__ == "__main__":
     with open("README") as readme:
         setup(
             name = "pyvsb",
-            version = "0.4",
+            version = "0.4.1",
 
             description = readme.readline().strip(),
             long_description = readme.read().strip(),
