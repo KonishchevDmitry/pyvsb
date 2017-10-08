@@ -109,7 +109,7 @@ class CompressedTarFile:
             self.__temp_file = tempfile.NamedTemporaryFile(dir = "/var/tmp")
             shutil.copyfileobj(compressed_file, self.__temp_file)
             self.__temp_file.flush()
-        except BaseException as e:
+        except BaseException as error:
             if self.__temp_file is not None:
                 try:
                     self.__temp_file.close()
@@ -119,10 +119,10 @@ class CompressedTarFile:
                 finally:
                     self.__temp_file = None
 
-            if not isinstance(e, Exception):
+            if not isinstance(error, Exception):
                 raise
 
-            LOG.error("Failed to decompress '%s': %s.", path, psys.e(e))
+            LOG.error("Failed to decompress '%s': %s.", path, psys.e(error))
         else:
             LOG.debug("Decompressing finished.")
             self.__file = tarfile.open(self.__temp_file.name)
