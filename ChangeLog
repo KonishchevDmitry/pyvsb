@@ -1,3 +1,8 @@
+Version 0.4.2
+-------------
+ * Don't complain that UNIX sockets can't be backed up - just skip them.
+
+
 Version 0.4.1
 -------------
  * Fix an exception handling error which led to less graceful error handling

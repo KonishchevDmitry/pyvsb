@@ -145,6 +145,8 @@ class Backuper:
 
             if stat.S_ISREG(stat_info.st_mode):
                 self.__backup_file(path)
+            elif stat.S_ISSOCK(stat_info.st_mode):
+                LOG.info("Skip UNIX socket - '%s'.", path)
             else:
                 if stat.S_ISLNK(stat_info.st_mode):
                     try:
