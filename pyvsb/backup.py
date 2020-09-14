@@ -663,11 +663,14 @@ class Restore:
 
 
 def _get_file_fingerprint(stat_info):
-    """Returns fingerprint of a file by its stat() info."""
+    """Returns fingerprint of a file by its stat() info.
 
-    return "{device}:{inode}:{mtime}".format(
+    Size is included only for statistics purposes and actually almost useless in fingerprint.
+    """
+
+    return "{device}:{inode}:{mtime}:{size}".format(
         device = stat_info.st_dev, inode = stat_info.st_ino,
-        mtime = int(stat_info.st_mtime))
+        mtime = int(stat_info.st_mtime), size = stat_info.st_size)
 
 
 def _get_tar_info(path, stat_info, link_target = None, extern = False):
