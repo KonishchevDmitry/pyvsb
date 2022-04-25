@@ -1,3 +1,8 @@
+Version 0.4.4
+-------------
+ * Fix incompatibility with Python 3.10
+
+
 Version 0.4.3
 -------------
  * Add file size to fingerprint to be able to collect backup statistics.

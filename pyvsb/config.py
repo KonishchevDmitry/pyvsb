@@ -5,7 +5,7 @@ import imp
 import os
 import re
 
-from collections import Callable
+from collections.abc import Callable
 
 from .core import Error
 
